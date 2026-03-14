@@ -39,12 +39,16 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
     case MSG_DBG: {
         const TelemetryEntry_t *entry =
             reinterpret_cast<const TelemetryEntry_t *>(frame->payload);
+        Serial.printf("[ROUTER] telemetry from role=%u: %s\n",
+                      frame->src_role, entry->name);
         _telem->ingest(entry);
         break;
     }
     case MSG_ACK: {
         const AckPayload_t *ack =
             reinterpret_cast<const AckPayload_t *>(frame->payload);
+        Serial.printf("[ROUTER] ACK from role=%u seq=%u status=0x%02X msg_type=0x%02X\n",
+                      frame->src_role, ack->ack_seq, ack->status, ack->msg_type);
         char buf[64];
         snprintf(buf, sizeof(buf),
                  "{\"type\":\"ack\",\"seq\":%u,\"status\":%u,\"msg_type\":%u}",
@@ -53,9 +57,13 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
         break;
     }
     case MSG_HEARTBEAT:
+        Serial.printf("[ROUTER] heartbeat from role=%u seq=%u\n",
+                      frame->src_role, frame->seq);
         broadcastPeerStatus();
         break;
     default:
+        Serial.printf("[ROUTER] unknown frame type=0x%02X from role=%u\n",
+                      frame->msg_type, frame->src_role);
         break;
     }
 }
@@ -213,5 +221,7 @@ void CommandRouter::_buildAndSend(uint8_t role, uint8_t msgType,
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + payLen);
     memcpy(frame.payload + payLen, &crc, 2);
 
+    Serial.printf("[ROUTER] tx type=0x%02X seq=%u -> role=%u (%s)\n",
+                  msgType, frame.seq, role, peer->name);
     _espnow->send(peer->mac, &frame);
 }

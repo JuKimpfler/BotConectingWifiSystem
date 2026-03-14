@@ -53,7 +53,8 @@ bool EspNowBridge::send(const uint8_t *mac, const Frame_t *frame) {
 
 void EspNowBridge::_onSent(const uint8_t *mac, esp_now_send_status_t s) {
     if (s != ESP_NOW_SEND_SUCCESS) {
-        Serial.printf("[BRIDGE] send failed to %02X:%02X\n", mac[4], mac[5]);
+        Serial.printf("[BRIDGE] send failed to %02X:%02X:%02X:%02X:%02X:%02X\n",
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
 }
 
@@ -72,6 +73,10 @@ void EspNowBridge::_onRecv(const uint8_t *mac,
         Serial.println("[BRIDGE] CRC error");
         return;
     }
+
+    Serial.printf("[BRIDGE] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u\n",
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                  f->msg_type, f->seq, f->src_role);
 
     EspNowBridge &self = instance();
     if (self._recvCb) {

@@ -88,8 +88,12 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     case MSG_HEARTBEAT:
         // Hub or peer heartbeat received
         if (frame->src_role == ROLE_HUB) {
+            bool wasOnline = g_hubOnline;
             g_lastHubHeartbeat = millis();
             g_hubOnline = true;
+            if (!wasOnline) {
+                Serial.printf("[SAT%d] Hub back online\n", SAT_ID);
+            }
             if (!g_hubKnown) {
                 memcpy(g_hubMac, mac, 6);
                 g_hubKnown = true;
@@ -97,7 +101,8 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
                 prefs.begin(NVS_NAMESPACE, false);
                 prefs.putBytes(NVS_KEY_HUB_MAC, g_hubMac, 6);
                 prefs.end();
-                Serial.println("[SAT] Hub MAC saved");
+                Serial.printf("[SAT] Hub MAC saved: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
             }
         }
         break;
@@ -109,7 +114,13 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         char uartBuf[128];
         int n = parser.hubFrameToUart(frame, uartBuf, sizeof(uartBuf));
         if (n > 0) {
+            Serial.printf("[SAT%d] cmd type=0x%02X seq=%u -> UART: ",
+                          SAT_ID, frame->msg_type, frame->seq);
+            Serial.print(uartBuf);  // uartBuf already ends with '\n'
             TeensySerial.print(uartBuf);
+        } else {
+            Serial.printf("[SAT%d] cmd type=0x%02X seq=%u – UART encode failed\n",
+                          SAT_ID, frame->msg_type, frame->seq);
         }
         // Send ACK to hub if requested
         if ((frame->flags & FLAG_ACK_REQ) && g_hubKnown) {
@@ -117,13 +128,16 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             ack.ack_seq  = frame->seq;
             ack.status   = ACK_OK;
             ack.msg_type = frame->msg_type;
-            sendFrame(g_hubMac, MSG_ACK, (const uint8_t *)&ack, sizeof(ack));
+            bool ok = sendFrame(g_hubMac, MSG_ACK, (const uint8_t *)&ack, sizeof(ack));
+            Serial.printf("[SAT%d] ACK seq=%u sent=%s\n", SAT_ID, frame->seq, ok ? "ok" : "fail");
         }
         break;
     }
 
     case MSG_ACK: {
         const AckPayload_t *ack = reinterpret_cast<const AckPayload_t *>(frame->payload);
+        Serial.printf("[SAT%d] ACK received ack_seq=%u status=0x%02X\n",
+                      SAT_ID, ack->ack_seq, ack->status);
         ackMgr.onAck(ack->ack_seq);
         break;
     }
@@ -146,12 +160,15 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             resp.channel = g_channel;
             snprintf(resp.name, sizeof(resp.name), "SAT%d", SAT_ID);
             WiFi.macAddress(resp.mac);
+            Serial.printf("[SAT%d] discovery scan from peer – sending announce\n", SAT_ID);
             sendFrame(mac, MSG_DISCOVERY, (const uint8_t *)&resp, sizeof(resp));
         }
         break;
     }
 
     default:
+        Serial.printf("[SAT%d] unknown frame type=0x%02X seq=%u\n",
+                      SAT_ID, frame->msg_type, frame->seq);
         break;
     }
 }
@@ -197,7 +214,14 @@ void loop() {
                     frame.seq = g_seq++;
                     // Send telemetry to hub
                     if (g_hubKnown) {
-                        EspNowBridge::instance().send(g_hubMac, &frame);
+                        bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
+                        Serial.printf("[SAT%d] UART telem '", SAT_ID);
+                        Serial.print(uartLine);
+                        Serial.printf("' -> hub %s\n", ok ? "ok" : "fail");
+                    } else {
+                        Serial.printf("[SAT%d] UART telem '", SAT_ID);
+                        Serial.print(uartLine);
+                        Serial.println("' – hub unknown, dropped");
                     }
                     // Forward to peer satellite (P2P bridge)
                     if (g_peerKnown) {
@@ -225,7 +249,7 @@ void loop() {
     if (g_hubOnline && g_hubKnown &&
         (now - g_lastHubHeartbeat) > HEARTBEAT_TIMEOUT_MS) {
         g_hubOnline = false;
-        Serial.println("[SAT] Hub offline – P2P bridge still active");
+        Serial.printf("[SAT%d] Hub offline – P2P bridge still active\n", SAT_ID);
     }
 
     // ── ACK retry tick ────────────────────────────────────────
