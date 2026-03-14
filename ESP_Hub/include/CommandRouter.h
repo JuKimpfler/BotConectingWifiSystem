@@ -10,11 +10,13 @@
 #include "PeerRegistry.h"
 #include "EspNowManager.h"
 #include "TelemetryBuffer.h"
+#include "ConfigStore.h"
 
 class CommandRouter {
 public:
     void begin(AsyncWebSocket *ws, EspNowManager *espnow,
-               PeerRegistry *peers, TelemetryBuffer *telem);
+               PeerRegistry *peers, TelemetryBuffer *telem,
+               ConfigStore *cfgStore = nullptr, HubConfig *hubCfg = nullptr);
 
     // Called when a WebSocket message arrives from the browser
     void onWsMessage(uint8_t *data, size_t len);
@@ -29,10 +31,12 @@ public:
     void broadcastPeerStatus();
 
 private:
-    AsyncWebSocket  *_ws     = nullptr;
-    EspNowManager   *_espnow = nullptr;
-    PeerRegistry    *_peers  = nullptr;
-    TelemetryBuffer *_telem  = nullptr;
+    AsyncWebSocket  *_ws       = nullptr;
+    EspNowManager   *_espnow   = nullptr;
+    PeerRegistry    *_peers    = nullptr;
+    TelemetryBuffer *_telem    = nullptr;
+    ConfigStore     *_cfgStore = nullptr;
+    HubConfig       *_hubCfg   = nullptr;
 
     uint8_t _seq = 0;
 
