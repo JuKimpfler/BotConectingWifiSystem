@@ -34,7 +34,22 @@ void CommandRouter::onWsMessage(uint8_t *data, size_t len) {
 
 // ─── ESP-NOW inbound ────────────────────────────────────────
 void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
+    // Capture online state before updating so we can detect the offline→online transition.
+    // markOnline() only updates existing entries in-place; it never adds or removes peers.
+    bool wasOnline = false;
+    {
+        PeerInfo *p = _peers->findByMac(mac);
+        if (p) wasOnline = p->online;
+    }
     _peers->markOnline(mac, true);
+    // Re-fetch to confirm the transition happened (peer must have been in the registry)
+    PeerInfo *peer = _peers->findByMac(mac);
+    if (!wasOnline && peer && peer->online) {
+        // Peer just came online – push status to UI right away
+        Serial.printf("[ROUTER] peer MAC %02X:%02X:%02X:%02X:%02X:%02X came online\n",
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        broadcastPeerStatus();
+    }
 
     switch (frame->msg_type) {
     case MSG_DBG: {
