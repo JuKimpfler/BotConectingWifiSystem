@@ -60,8 +60,8 @@ bool EspNowManager::send(const uint8_t *mac, const Frame_t *frame) {
 
 void EspNowManager::_onSent(const uint8_t *mac, esp_now_send_status_t s) {
     if (s != ESP_NOW_SEND_SUCCESS) {
-        Serial.printf("[ESPNOW] send failed to %02X:%02X:%02X\n",
-                      mac[3], mac[4], mac[5]);
+        Serial.printf("[ESPNOW] send failed to %02X:%02X:%02X:%02X:%02X:%02X\n",
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
 }
 
@@ -81,6 +81,10 @@ void EspNowManager::_onRecv(const uint8_t *mac,
         Serial.println("[ESPNOW] CRC mismatch – frame dropped");
         return;
     }
+
+    Serial.printf("[ESPNOW] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u\n",
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                  f->msg_type, f->seq, f->src_role);
 
     EspNowManager &self = instance();
     if (self._recvCb) {
