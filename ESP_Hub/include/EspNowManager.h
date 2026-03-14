@@ -27,7 +27,7 @@ public:
 private:
     EspNowManager() = default;
     static void _onSent(const uint8_t *mac, esp_now_send_status_t s);
-    static void _onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+    static void _onRecv(const uint8_t *mac, const uint8_t *data, int len);
 
     FrameRecvCb _recvCb = nullptr;
     uint8_t     _channel = DEFAULT_CHANNEL;

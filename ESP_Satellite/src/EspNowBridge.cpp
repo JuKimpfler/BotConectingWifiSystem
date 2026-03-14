@@ -7,10 +7,9 @@
 #include "crc16.h"
 #include <esp_wifi.h>
 
-static EspNowBridge s_instance;
-
 EspNowBridge &EspNowBridge::instance() {
-    return s_instance;
+    static EspNowBridge instance;
+    return instance;
 }
 
 bool EspNowBridge::begin(uint8_t channel) {
@@ -58,7 +57,7 @@ void EspNowBridge::_onSent(const uint8_t *mac, esp_now_send_status_t s) {
     }
 }
 
-void EspNowBridge::_onRecv(const esp_now_recv_info_t *info,
+void EspNowBridge::_onRecv(const uint8_t *mac,
                             const uint8_t *data, int len) {
     if (len < (int)(FRAME_HEADER_SIZE + 2)) return;
 
@@ -74,7 +73,8 @@ void EspNowBridge::_onRecv(const esp_now_recv_info_t *info,
         return;
     }
 
-    if (s_instance._recvCb) {
-        s_instance._recvCb(info->src_addr, f);
+    EspNowBridge &self = instance();
+    if (self._recvCb) {
+        self._recvCb(mac, f);
     }
 }

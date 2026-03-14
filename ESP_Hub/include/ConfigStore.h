@@ -6,6 +6,7 @@
 
 #include <Arduino.h>
 #include "PeerRegistry.h"
+#include "hub_config.h"
 
 struct HubConfig {
     uint8_t  version;

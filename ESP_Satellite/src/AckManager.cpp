@@ -3,7 +3,16 @@
 // ============================================================
 
 #include "AckManager.h"
+#include "sat_config.h"
 #include <string.h>
+
+#ifndef ACK_TIMEOUT_MS
+#define ACK_TIMEOUT_MS 500
+#endif
+
+#ifndef ACK_MAX_RETRIES
+#define ACK_MAX_RETRIES 3
+#endif
 
 void AckManager::begin() {
     memset(_queue, 0, sizeof(_queue));
