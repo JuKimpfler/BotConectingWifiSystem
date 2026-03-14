@@ -121,21 +121,48 @@ BotConnectingWifiSystem/
 - [Node.js ≥ 18](https://nodejs.org) (for Web UI build)
 - 3× Seeed Studio XIAO ESP32-C3
 
-### 1. Build the Web UI
+### 1. Flash ESP_Hub firmware (ESP #3)
 
-```bash
-cd ESP_Hub/ui
-npm install
-npm run build   # outputs to ESP_Hub/data/
-```
-
-### 2. Flash ESP_Hub (ESP #3)
+Connect the Hub ESP32-C3 via USB, then run:
 
 ```bash
 cd ESP_Hub
-pio run -e esp_hub -t upload          # Flash firmware
-pio run -e esp_hub -t uploadfs        # Upload LittleFS (UI)
+pio run -e esp_hub -t upload
 ```
+
+This compiles and flashes the firmware.  
+The serial monitor can be started with `pio device monitor` (115200 baud).
+
+### 2. Upload the Website (LittleFS)
+
+The Web UI is a Vite application located in `ESP_Hub/ui/`.  
+It must be compiled and then uploaded as a LittleFS filesystem image to host the site on the Hub.
+
+> **The `uploadfs` command handles both steps automatically:**  
+> it builds the UI first (runs `npm install` + `npm run build` into `ESP_Hub/data/`)  
+> and then packs and flashes the LittleFS image.
+
+```bash
+cd ESP_Hub
+pio run -e esp_hub -t uploadfs
+```
+
+If you prefer to build the UI manually beforehand:
+
+```bash
+# Step A – build the UI (only needed once, or after UI source changes)
+cd ESP_Hub/ui
+npm install
+npm run build   # output goes to ESP_Hub/data/
+
+# Step B – flash the LittleFS image
+cd ..
+pio run -e esp_hub -t uploadfs
+```
+
+> **Important:** Flash the **firmware first** (`-t upload`) and then the  
+> **filesystem** (`-t uploadfs`). Flashing the firmware after the filesystem  
+> will erase the LittleFS partition.
 
 ### 3. Flash ESP_Satellite
 
@@ -269,8 +296,11 @@ void loop() {
 | SAT badges always offline | Wrong ESP-NOW channel or MACs not paired | Re-scan in Settings; check channel=6 everywhere |
 | No telemetry data | Teensy not sending `DBG1:` / `DBG2:` lines | Check `BC.begin(Serial1, 1)` and that `process()` is called |
 | ACK timeout | Satellite offline or out of range | Check power; reduce distance; check LTK configuration |
-| UI 404 | LittleFS not flashed | Run `pio run -t uploadfs` for esp_hub env |
-| Settings not saved | LittleFS mount failed | Try `pio run -t erase` then re-flash firmware + FS |
+| UI 404 / blank page | LittleFS not flashed | Run `cd ESP_Hub && pio run -e esp_hub -t uploadfs` |
+| `uploadfs` fails – `npm` not found | Node.js not installed | Install Node.js ≥ 18 from https://nodejs.org |
+| `uploadfs` fails – `npm run build` error | UI dependencies missing or broken | Run `cd ESP_Hub/ui && npm install` then retry `uploadfs` |
+| Browser shows old/cached UI | Browser cache stale | Hard-reload (`Ctrl+Shift+R` / `Cmd+Shift+R`) |
+| Settings not saved | LittleFS mount failed | Run `pio run -e esp_hub -t erase`, then re-flash firmware, then `uploadfs` |
 | Mode button no ACK | Teensy not connected to satellite | Check UART wiring (TX/RX swap!) |
 
 ---
