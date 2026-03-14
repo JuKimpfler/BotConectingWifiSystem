@@ -28,6 +28,8 @@ public:
     void onAck(uint8_t seq);
     // Called in loop – resends expired frames
     void tick(bool (*sendFn)(const uint8_t *mac, const Frame_t *frame));
+    // Returns number of entries currently waiting for ACK
+    int  pendingCount() const;
 
 private:
     PendingAck _queue[ACK_QUEUE_SIZE];

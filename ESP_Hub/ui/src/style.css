@@ -287,3 +287,30 @@ button:active { opacity: 0.7; }
 }
 
 #scan-results { margin-top: 8px; min-height: 20px; font-size: 12px; }
+
+.scan-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.manual-peer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.manual-peer label { margin-bottom: 6px; }
+
+select {
+  background: #0c0e0f;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  color: var(--text-hi);
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

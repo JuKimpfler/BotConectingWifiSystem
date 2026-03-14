@@ -64,3 +64,11 @@ void AckManager::tick(bool (*sendFn)(const uint8_t *mac, const Frame_t *frame)) 
                       _queue[i].seq, _queue[i].retries);
     }
 }
+
+int AckManager::pendingCount() const {
+    int cnt = 0;
+    for (int i = 0; i < ACK_QUEUE_SIZE; i++) {
+        if (_queue[i].active) cnt++;
+    }
+    return cnt;
+}

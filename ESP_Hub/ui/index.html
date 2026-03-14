@@ -135,6 +135,18 @@
           <div id="peer-list"></div>
           <button id="btn-scan">Scan for peers</button>
           <div id="scan-results"></div>
+          <div class="manual-peer">
+            <h2>Manual Add</h2>
+            <label>MAC: <input type="text" id="cfg-peer-mac" maxlength="17" placeholder="XX:XX:XX:XX:XX:XX" /></label>
+            <label>Name: <input type="text" id="cfg-peer-name" maxlength="16" placeholder="SAT1" /></label>
+            <label>Role:
+              <select id="cfg-peer-role">
+                <option value="1">SAT 1</option>
+                <option value="2">SAT 2</option>
+              </select>
+            </label>
+            <button id="btn-add-peer">Add Peer</button>
+          </div>
         </div>
         <div class="panel">
           <h2>Telemetry</h2>

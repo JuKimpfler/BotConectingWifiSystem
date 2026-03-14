@@ -223,9 +223,49 @@ document.getElementById('btn-save-cfg').addEventListener('click', () => {
   settingsFeedback.className = 'feedback'
 })
 
+// ── Scan for peers ────────────────────────────────────────────
+const scanResults = document.getElementById('scan-results')
+
 document.getElementById('btn-scan').addEventListener('click', () => {
-  document.getElementById('scan-results').textContent = 'Scanning…'
+  scanResults.innerHTML = 'Scanning…'
   wsSend({ type: 'pair', data: JSON.stringify({ action: 0, role: 0, name: '' }) })
+})
+
+wsOn('scan_result', (msg) => {
+  // Remove placeholder text on first result
+  if (scanResults.textContent === 'Scanning…') {
+    scanResults.innerHTML = ''
+  }
+  const item = document.createElement('div')
+  item.className = 'scan-item'
+  item.innerHTML = `
+    <span>${msg.name || '—'}</span>
+    <span style="color:var(--text-dim);font-size:11px">${msg.mac}</span>
+    <span style="color:var(--text-dim);font-size:11px">ch${msg.channel}</span>
+    <button class="btn-use-peer">Use</button>
+  `
+  item.querySelector('.btn-use-peer').addEventListener('click', () => {
+    wsSend({
+      type: 'add_peer',
+      data: JSON.stringify({ mac: msg.mac, name: msg.name, role: msg.role })
+    })
+  })
+  scanResults.appendChild(item)
+})
+
+// ── Manual peer add ───────────────────────────────────────────
+document.getElementById('btn-add-peer').addEventListener('click', () => {
+  const mac  = document.getElementById('cfg-peer-mac').value.trim().toUpperCase()
+  const name = document.getElementById('cfg-peer-name').value.trim() || 'SAT'
+  const role = parseInt(document.getElementById('cfg-peer-role').value, 10)
+  if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac)) {
+    settingsFeedback.textContent = 'Invalid MAC (use XX:XX:XX:XX:XX:XX)'
+    settingsFeedback.className = 'feedback error'
+    return
+  }
+  wsSend({ type: 'add_peer', data: JSON.stringify({ mac, name, role }) })
+  settingsFeedback.textContent = `Peer ${name} (${mac}) added`
+  settingsFeedback.className = 'feedback'
 })
 
 document.getElementById('btn-factory-reset').addEventListener('click', () => {
