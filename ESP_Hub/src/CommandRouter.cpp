@@ -23,11 +23,12 @@ void CommandRouter::onWsMessage(uint8_t *data, size_t len) {
 
     const char *type = doc["type"] | "";
 
-    if (strcmp(type, "ctrl")     == 0) _handleCtrl(doc["data"].as<const char *>());
-    else if (strcmp(type, "mode")     == 0) _handleMode(doc["data"].as<const char *>());
-    else if (strcmp(type, "cal")      == 0) _handleCal(doc["data"].as<const char *>());
-    else if (strcmp(type, "settings") == 0) _handleSettings(doc["data"].as<const char *>());
-    else if (strcmp(type, "pair")     == 0) _handlePair(doc["data"].as<const char *>());
+    if (strcmp(type, "ctrl")       == 0) _handleCtrl(doc["data"].as<const char *>());
+    else if (strcmp(type, "mode")       == 0) _handleMode(doc["data"].as<const char *>());
+    else if (strcmp(type, "cal")        == 0) _handleCal(doc["data"].as<const char *>());
+    else if (strcmp(type, "settings")   == 0) _handleSettings(doc["data"].as<const char *>());
+    else if (strcmp(type, "pair")       == 0) _handlePair(doc["data"].as<const char *>());
+    else if (strcmp(type, "add_peer")   == 0) _handleAddPeer(doc["data"].as<const char *>());
     else if (strcmp(type, "get_status") == 0) broadcastPeerStatus();
 }
 
@@ -61,6 +62,42 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
                       frame->src_role, frame->seq);
         broadcastPeerStatus();
         break;
+    case MSG_DISCOVERY: {
+        const DiscoveryPayload_t *disc =
+            reinterpret_cast<const DiscoveryPayload_t *>(frame->payload);
+        if (disc->action == 1) {
+            // Announce from satellite – register peer and notify UI
+            char macStr[18];
+            snprintf(macStr, sizeof(macStr),
+                     "%02X:%02X:%02X:%02X:%02X:%02X",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            Serial.printf("[ROUTER] discovery announce: role=%u name=%s mac=%s ch=%u\n",
+                          disc->role, disc->name, macStr, disc->channel);
+
+            // Add / update peer in registry
+            PeerInfo info = {};
+            strlcpy(info.name, disc->name, sizeof(info.name));
+            info.role     = disc->role;
+            memcpy(info.mac, mac, 6);
+            info.online   = true;
+            info.lastSeen = millis();
+            _peers->addOrUpdate(info);
+
+            // Register peer in ESP-NOW so we can send to it
+            _espnow->addPeer(mac, nullptr);
+
+            // Send scan_result to UI
+            char buf[160];
+            snprintf(buf, sizeof(buf),
+                     "{\"type\":\"scan_result\",\"name\":\"%s\","
+                     "\"role\":%u,\"mac\":\"%s\",\"channel\":%u}",
+                     disc->name, disc->role, macStr, disc->channel);
+            if (_ws) _ws->textAll(buf);
+
+            broadcastPeerStatus();
+        }
+        break;
+    }
     default:
         Serial.printf("[ROUTER] unknown frame type=0x%02X from role=%u\n",
                       frame->msg_type, frame->src_role);
@@ -178,25 +215,84 @@ void CommandRouter::_handlePair(const char *json) {
     JsonDocument doc;
     if (deserializeJson(doc, json) != DeserializationError::Ok) return;
 
-    PairPayload_t pair = {};
-    pair.action = doc["action"] | 0;
-    pair.role   = doc["role"]   | (uint8_t)ROLE_SAT1;
-    strlcpy(pair.name, doc["name"] | "", sizeof(pair.name));
+    uint8_t action = doc["action"] | 0;
 
-    uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    Frame_t frame = {};
-    frame.magic    = FRAME_MAGIC;
-    frame.msg_type = MSG_PAIR;
-    frame.seq      = _seq++;
-    frame.src_role = ROLE_HUB;
-    frame.dst_role = ROLE_BROADCAST;
-    frame.flags    = FLAG_ACK_REQ;
-    frame.len      = sizeof(PairPayload_t);
-    memcpy(frame.payload, &pair, sizeof(pair));
+    if (action == 0) {
+        // Scan: broadcast MSG_DISCOVERY so all satellites can announce themselves
+        DiscoveryPayload_t disc = {};
+        disc.action  = 0;  // scan request
+        disc.role    = ROLE_HUB;
+        strlcpy(disc.name, "HUB", sizeof(disc.name));
+        WiFi.softAPmacAddress(disc.mac);
 
-    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
-    memcpy(frame.payload + frame.len, &crc, 2);
-    _espnow->send(bcast, &frame);
+        uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        Frame_t frame = {};
+        frame.magic    = FRAME_MAGIC;
+        frame.msg_type = MSG_DISCOVERY;
+        frame.seq      = _seq++;
+        frame.src_role = ROLE_HUB;
+        frame.dst_role = ROLE_BROADCAST;
+        frame.flags    = 0;
+        frame.len      = sizeof(DiscoveryPayload_t);
+        memcpy(frame.payload, &disc, sizeof(disc));
+
+        uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+        memcpy(frame.payload + frame.len, &crc, 2);
+        _espnow->send(bcast, &frame);
+        Serial.println("[ROUTER] Discovery scan broadcast sent");
+    } else {
+        // action==2: unpair – keep original MSG_PAIR logic
+        PairPayload_t pair = {};
+        pair.action = action;
+        pair.role   = doc["role"] | (uint8_t)ROLE_SAT1;
+        strlcpy(pair.name, doc["name"] | "", sizeof(pair.name));
+
+        uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        Frame_t frame = {};
+        frame.magic    = FRAME_MAGIC;
+        frame.msg_type = MSG_PAIR;
+        frame.seq      = _seq++;
+        frame.src_role = ROLE_HUB;
+        frame.dst_role = ROLE_BROADCAST;
+        frame.flags    = FLAG_ACK_REQ;
+        frame.len      = sizeof(PairPayload_t);
+        memcpy(frame.payload, &pair, sizeof(pair));
+
+        uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+        memcpy(frame.payload + frame.len, &crc, 2);
+        _espnow->send(bcast, &frame);
+    }
+}
+
+void CommandRouter::_handleAddPeer(const char *json) {
+    if (!json) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+    const char *macStr = doc["mac"]  | "";
+    const char *name   = doc["name"] | "SAT";
+    uint8_t role       = doc["role"] | (uint8_t)ROLE_SAT1;
+
+    uint8_t mac[6] = {};
+    if (sscanf(macStr,
+               "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+               &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6) {
+        Serial.printf("[ROUTER] add_peer: invalid MAC '%s'\n", macStr);
+        if (_ws) _ws->textAll("{\"type\":\"error\",\"msg\":\"Invalid MAC address\"}");
+        return;
+    }
+
+    PeerInfo info = {};
+    strlcpy(info.name, name, sizeof(info.name));
+    info.role     = role;
+    memcpy(info.mac, mac, 6);
+    info.online   = false;
+    info.lastSeen = 0;
+    _peers->addOrUpdate(info);
+    _espnow->addPeer(mac, nullptr);
+
+    Serial.printf("[ROUTER] Manual peer added: name=%s role=%u mac=%s\n", name, role, macStr);
+    broadcastPeerStatus();
 }
 
 void CommandRouter::_buildAndSend(uint8_t role, uint8_t msgType,

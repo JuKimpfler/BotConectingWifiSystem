@@ -36,6 +36,60 @@ static bool     g_hubOnline  = false;
 // ── P2P send interval ─────────────────────────────────────────
 static uint32_t g_lastP2pSend = 0;
 
+// ─── USB serial command handler ──────────────────────────────
+static char s_serialCmdBuf[64];
+static int  s_serialCmdIdx = 0;
+
+static void handleSerialCmd(const char *cmd) {
+    if (strncasecmp(cmd, "mac", 3) == 0 || strncasecmp(cmd, "info", 4) == 0) {
+        Serial.printf("[SAT%d] Own MAC : %s\n", SAT_ID, WiFi.macAddress().c_str());
+        Serial.printf("[SAT%d] Channel : %u\n", SAT_ID, g_channel);
+        if (g_hubKnown) {
+            Serial.printf("[SAT%d] Hub MAC : %02X:%02X:%02X:%02X:%02X:%02X\n",
+                          SAT_ID,
+                          g_hubMac[0], g_hubMac[1], g_hubMac[2],
+                          g_hubMac[3], g_hubMac[4], g_hubMac[5]);
+        } else {
+            Serial.printf("[SAT%d] Hub MAC : unknown\n", SAT_ID);
+        }
+        if (g_peerKnown) {
+            Serial.printf("[SAT%d] Peer MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                          SAT_ID,
+                          g_peerMac[0], g_peerMac[1], g_peerMac[2],
+                          g_peerMac[3], g_peerMac[4], g_peerMac[5]);
+        } else {
+            Serial.printf("[SAT%d] Peer MAC: unknown\n", SAT_ID);
+        }
+        Serial.printf("[SAT%d] Hub online: %s\n", SAT_ID, g_hubOnline ? "yes" : "no");
+    } else if (strncasecmp(cmd, "debug", 5) == 0) {
+        Serial.printf("[SAT%d] === Debug Status ===\n", SAT_ID);
+        Serial.printf("[SAT%d] Uptime    : %lu ms\n", SAT_ID, (unsigned long)millis());
+        Serial.printf("[SAT%d] Own MAC   : %s\n", SAT_ID, WiFi.macAddress().c_str());
+        Serial.printf("[SAT%d] Channel   : %u\n", SAT_ID, g_channel);
+        Serial.printf("[SAT%d] Hub       : %s (%s)\n", SAT_ID,
+                      g_hubKnown  ? "known"   : "unknown",
+                      g_hubOnline ? "online"  : "offline");
+        Serial.printf("[SAT%d] Peer      : %s\n", SAT_ID,
+                      g_peerKnown ? "known"   : "unknown");
+        Serial.printf("[SAT%d] ACK queue : %u pending\n", SAT_ID, ackMgr.pendingCount());
+    } else if (strncasecmp(cmd, "clearmac", 8) == 0) {
+        g_hubKnown  = false;
+        g_peerKnown = false;
+        memset(g_hubMac,  0, 6);
+        memset(g_peerMac, 0, 6);
+        Preferences prefs;
+        prefs.begin(NVS_NAMESPACE, false);
+        prefs.remove(NVS_KEY_HUB_MAC);
+        prefs.remove(NVS_KEY_PEER_MAC);
+        prefs.end();
+        Serial.printf("[SAT%d] Stored MACs cleared\n", SAT_ID);
+    } else if (strncasecmp(cmd, "help", 4) == 0) {
+        Serial.printf("[SAT%d] USB commands: mac | info | debug | clearmac | help\n", SAT_ID);
+    } else {
+        Serial.printf("[SAT%d] Unknown command '%s'. Type 'help'.\n", SAT_ID, cmd);
+    }
+}
+
 // ─── Load config from NVS ────────────────────────────────────
 static void loadConfig() {
     Preferences prefs;
@@ -153,6 +207,23 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         const DiscoveryPayload_t *disc =
             reinterpret_cast<const DiscoveryPayload_t *>(frame->payload);
         if (disc->action == 0) {
+            // Ensure the requester is registered as an ESP-NOW peer so we can reply
+            EspNowBridge::instance().addPeer(mac);
+
+            // If the request came from the hub, learn its MAC
+            if (frame->src_role == ROLE_HUB && !g_hubKnown) {
+                memcpy(g_hubMac, mac, 6);
+                g_hubKnown = true;
+                Preferences prefs;
+                prefs.begin(NVS_NAMESPACE, false);
+                prefs.putBytes(NVS_KEY_HUB_MAC, g_hubMac, 6);
+                prefs.end();
+                Serial.printf("[SAT%d] Hub MAC learned via discovery: "
+                              "%02X:%02X:%02X:%02X:%02X:%02X\n",
+                              SAT_ID,
+                              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            }
+
             // Announce ourselves
             DiscoveryPayload_t resp = {};
             resp.action  = 1;
@@ -160,7 +231,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             resp.channel = g_channel;
             snprintf(resp.name, sizeof(resp.name), "SAT%d", SAT_ID);
             WiFi.macAddress(resp.mac);
-            Serial.printf("[SAT%d] discovery scan from peer – sending announce\n", SAT_ID);
+            Serial.printf("[SAT%d] Discovery request received – sending announce\n", SAT_ID);
             sendFrame(mac, MSG_DISCOVERY, (const uint8_t *)&resp, sizeof(resp));
         }
         break;
@@ -193,7 +264,9 @@ void setup() {
 
     ackMgr.begin();
 
-    Serial.printf("[SAT%d] Ready\n", SAT_ID);
+    Serial.printf("[SAT%d] Ready – MAC: %s  ch=%u\n",
+                  SAT_ID, WiFi.macAddress().c_str(), g_channel);
+    Serial.printf("[SAT%d] Type 'help' for USB commands\n", SAT_ID);
 }
 
 // ─── Loop ─────────────────────────────────────────────────────
@@ -256,4 +329,30 @@ void loop() {
     ackMgr.tick([](const uint8_t *mac, const Frame_t *frame) -> bool {
         return EspNowBridge::instance().send(mac, frame);
     });
+
+    // ── USB serial command handler ────────────────────────────
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        if (c == '\n' || c == '\r') {
+            if (s_serialCmdIdx > 0) {
+                s_serialCmdBuf[s_serialCmdIdx] = '\0';
+                handleSerialCmd(s_serialCmdBuf);
+                s_serialCmdIdx = 0;
+            }
+        } else if (s_serialCmdIdx < (int)(sizeof(s_serialCmdBuf) - 1)) {
+            s_serialCmdBuf[s_serialCmdIdx++] = c;
+        }
+    }
+
+    // ── Periodic debug output via USB ─────────────────────────
+    static uint32_t s_lastDbgPrint = 0;
+    if ((now - s_lastDbgPrint) >= 10000) {
+        s_lastDbgPrint = now;
+        Serial.printf("[SAT%d] uptime=%lums mac=%s ch=%u hub=%s peer=%s\n",
+                      SAT_ID, (unsigned long)now,
+                      WiFi.macAddress().c_str(),
+                      g_channel,
+                      g_hubKnown  ? (g_hubOnline ? "online" : "offline") : "unknown",
+                      g_peerKnown ? "known" : "unknown");
+    }
 }
