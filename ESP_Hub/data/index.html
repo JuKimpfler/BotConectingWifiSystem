@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP-NOW Hub</title>
+  <script type="module" crossorigin src="/assets/index-C_uaJCFx.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-Csv7Zg3X.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <span class="logo">ESP-NOW Hub</span>
+      <div class="peer-badges">
+        <span id="badge-sat1" class="badge offline">SAT1 –</span>
+        <span id="badge-sat2" class="badge offline">SAT2 –</span>
+        <span id="ws-status" class="badge offline">WS</span>
+      </div>
+    </header>
+
+    <!-- Tab navigation -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="debug">Debug</button>
+      <button class="tab" data-tab="manual">Manual</button>
+      <button class="tab" data-tab="modes">Modes</button>
+      <button class="tab" data-tab="calibrate">Calibrate</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- ── DEBUG ──────────────────────────────────────────── -->
+    <section id="tab-debug" class="tab-panel active">
+      <div class="panel-row">
+        <div class="panel flex-2">
+          <h2>Telemetry Streams</h2>
+          <table id="telem-table">
+            <thead>
+              <tr><th>Stream</th><th>Current</th><th>Min</th><th>Max</th></tr>
+            </thead>
+            <tbody id="telem-body"></tbody>
+          </table>
+        </div>
+        <div class="panel flex-1">
+          <h2>Raw Monitor</h2>
+          <div id="raw-monitor" class="monitor"></div>
+          <div class="toolbar">
+            <button id="monitor-clear">Clear</button>
+            <label><input type="checkbox" id="monitor-pause"> Pause</label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── MANUAL ─────────────────────────────────────────── -->
+    <section id="tab-manual" class="tab-panel">
+      <div class="panel-row">
+        <div class="panel">
+          <h2>Target</h2>
+          <div class="target-sel">
+            <button id="target-sat1" class="btn-target active" data-role="1">SAT 1</button>
+            <button id="target-sat2" class="btn-target" data-role="2">SAT 2</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Directional</h2>
+          <div class="dpad">
+            <button id="btn-up"    class="dpad-btn up"    data-dir="up">▲</button>
+            <button id="btn-left"  class="dpad-btn left"  data-dir="left">◀</button>
+            <button id="btn-ok"    class="dpad-btn ok"    data-dir="ok">OK</button>
+            <button id="btn-right" class="dpad-btn right" data-dir="right">▶</button>
+            <button id="btn-down"  class="dpad-btn down"  data-dir="down">▼</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Parameters</h2>
+          <label>Speed: <input type="number" id="inp-speed" value="0" min="-255" max="255" /></label>
+          <label>Angle: <input type="number" id="inp-angle" value="0" min="-180" max="180" /></label>
+          <div class="switches">
+            <label><input type="checkbox" id="sw1"> SW1</label>
+            <label><input type="checkbox" id="sw2"> SW2</label>
+            <label><input type="checkbox" id="sw3"> SW3</label>
+          </div>
+          <div class="buttons-row">
+            <button class="btn-action" id="b1" data-btn="1">B1</button>
+            <button class="btn-action" id="b2" data-btn="2">B2</button>
+            <button class="btn-action" id="b3" data-btn="3">B3</button>
+            <button class="btn-action" id="b4" data-btn="4">B4</button>
+          </div>
+          <button id="btn-start" class="btn-start">START</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── MODES ──────────────────────────────────────────── -->
+    <section id="tab-modes" class="tab-panel">
+      <div class="panel">
+        <h2>Mode Selection</h2>
+        <div class="mode-grid">
+          <button class="btn-mode" data-mode="1">1 – PID Mode</button>
+          <button class="btn-mode" data-mode="2">2 – Ball Approach</button>
+          <button class="btn-mode" data-mode="3">3 – Goal Rotate</button>
+          <button class="btn-mode" data-mode="4">4 – Homing</button>
+          <button class="btn-mode" data-mode="5">5 – Defender</button>
+        </div>
+        <div id="mode-feedback" class="feedback"></div>
+      </div>
+    </section>
+
+    <!-- ── CALIBRATE ──────────────────────────────────────── -->
+    <section id="tab-calibrate" class="tab-panel">
+      <div class="panel">
+        <h2>Calibration</h2>
+        <div class="cal-grid">
+          <button class="btn-cal" data-cal="1">IR Max</button>
+          <button class="btn-cal" data-cal="2">IR Min</button>
+          <button class="btn-cal" data-cal="3">Line Max</button>
+          <button class="btn-cal" data-cal="4">Line Min</button>
+          <button class="btn-cal" data-cal="5">BNO</button>
+        </div>
+        <div id="cal-feedback" class="feedback"></div>
+      </div>
+    </section>
+
+    <!-- ── SETTINGS ───────────────────────────────────────── -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="panel-row">
+        <div class="panel">
+          <h2>ESP-NOW</h2>
+          <label>Channel (1–13): <input type="number" id="cfg-channel" value="6" min="1" max="13" /></label>
+          <label>PMK (32 hex chars):
+            <input type="text" id="cfg-pmk" maxlength="32" placeholder="leave blank to disable" />
+          </label>
+        </div>
+        <div class="panel">
+          <h2>Peers</h2>
+          <div id="peer-list"></div>
+          <button id="btn-scan">Scan for peers</button>
+          <div id="scan-results"></div>
+        </div>
+        <div class="panel">
+          <h2>Telemetry</h2>
+          <label>Max rate (Hz): <input type="number" id="cfg-telem-hz" value="20" min="1" max="50" /></label>
+          <h2>Actions</h2>
+          <button id="btn-save-cfg">Save Config</button>
+          <button id="btn-factory-reset" class="btn-danger">Factory Reset</button>
+          <div id="settings-feedback" class="feedback"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+</body>
+</html>
