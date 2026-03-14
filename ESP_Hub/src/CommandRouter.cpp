@@ -9,11 +9,14 @@
 #include <ArduinoJson.h>
 
 void CommandRouter::begin(AsyncWebSocket *ws, EspNowManager *espnow,
-                          PeerRegistry *peers, TelemetryBuffer *telem) {
-    _ws     = ws;
-    _espnow = espnow;
-    _peers  = peers;
-    _telem  = telem;
+                          PeerRegistry *peers, TelemetryBuffer *telem,
+                          ConfigStore *cfgStore, HubConfig *hubCfg) {
+    _ws       = ws;
+    _espnow   = espnow;
+    _peers    = peers;
+    _telem    = telem;
+    _cfgStore = cfgStore;
+    _hubCfg   = hubCfg;
 }
 
 // ─── WebSocket inbound ──────────────────────────────────────
@@ -220,9 +223,44 @@ void CommandRouter::_handleCal(const char *json) {
 
 void CommandRouter::_handleSettings(const char *json) {
     if (!json) return;
-    // Settings are applied locally and/or forwarded
-    // Actual implementation wires into ConfigStore
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
     Serial.printf("[ROUTER] settings update: %s\n", json);
+
+    if (!_hubCfg || !_cfgStore || !_peers) {
+        Serial.println("[ROUTER] settings: cfgStore/hubCfg not available");
+        if (_ws) _ws->textAll("{\"type\":\"ack\",\"seq\":0,\"status\":1,\"msg_type\":9}");
+        return;
+    }
+
+    // Apply settings to runtime config
+    if (doc.containsKey("channel")) {
+        _hubCfg->channel = doc["channel"] | _hubCfg->channel;
+    }
+    if (doc.containsKey("pmk")) {
+        const char *pmk = doc["pmk"] | "";
+        strlcpy(_hubCfg->pmk_hex, pmk, sizeof(_hubCfg->pmk_hex));
+    }
+    if (doc.containsKey("telemetry_max_hz")) {
+        _hubCfg->telemetry_max_hz = doc["telemetry_max_hz"] | _hubCfg->telemetry_max_hz;
+        // Update telemetry interval at runtime
+        if (_telem && _hubCfg->telemetry_max_hz > 0) {
+            _telem->begin(1000 / _hubCfg->telemetry_max_hz);
+        }
+    }
+
+    // Persist to flash
+    bool ok = _cfgStore->save(*_hubCfg, *_peers);
+
+    // Send feedback to UI
+    char buf[80];
+    snprintf(buf, sizeof(buf),
+             "{\"type\":\"ack\",\"seq\":%u,\"status\":%u,\"msg_type\":%u}",
+             _seq, ok ? ACK_OK : ACK_ERR_UNKNOWN, MSG_SETTINGS);
+    if (_ws) _ws->textAll(buf);
+
+    Serial.printf("[ROUTER] settings saved: %s\n", ok ? "OK" : "FAIL");
 }
 
 void CommandRouter::_handlePair(const char *json) {

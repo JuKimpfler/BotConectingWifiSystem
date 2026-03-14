@@ -3,15 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ESP-NOW Hub</title>
-  <script type="module" crossorigin src="/assets/index-zYq7UvKt.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-Dt0oQdes.css">
+  <title>ESP-NOW Hub</title>
+  <script type="module" crossorigin src="/assets/index-C2A2iGtC.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CqPVruRQ.css">
 </head>
 <body>
   <div id="app">
     <!-- Header -->
     <header class="header">
       <span class="logo">ESP-NOW Hub</span>
+      <div class="target-sel-global">
+        <button id="target-sat1" class="btn-target active" data-role="1">SAT 1</button>
+        <button id="target-sat2" class="btn-target" data-role="2">SAT 2</button>
+      </div>
       <div class="peer-badges">
         <span id="badge-sat1" class="badge offline">SAT1 –</span>
         <span id="badge-sat2" class="badge offline">SAT2 –</span>
@@ -55,26 +59,18 @@
     <section id="tab-manual" class="tab-panel">
       <div class="panel-row">
         <div class="panel">
-          <h2>Target</h2>
-          <div class="target-sel">
-            <button id="target-sat1" class="btn-target active" data-role="1">SAT 1</button>
-            <button id="target-sat2" class="btn-target" data-role="2">SAT 2</button>
+          <h2>Joystick</h2>
+          <div class="joystick-wrapper">
+            <canvas id="joystick" width="180" height="180"></canvas>
           </div>
-        </div>
-        <div class="panel">
-          <h2>Directional</h2>
-          <div class="dpad">
-            <button id="btn-up"    class="dpad-btn up"    data-dir="up">▲</button>
-            <button id="btn-left"  class="dpad-btn left"  data-dir="left">◀</button>
-            <button id="btn-ok"    class="dpad-btn ok"    data-dir="ok">OK</button>
-            <button id="btn-right" class="dpad-btn right" data-dir="right">▶</button>
-            <button id="btn-down"  class="dpad-btn down"  data-dir="down">▼</button>
+          <div class="joystick-info">
+            <span>Speed: <strong id="js-speed">0</strong></span>
+            <span>Angle: <strong id="js-angle">0</strong></span>
           </div>
         </div>
         <div class="panel">
           <h2>Parameters</h2>
-          <label>Speed: <input type="number" id="inp-speed" value="0" min="-255" max="255" /></label>
-          <label>Angle: <input type="number" id="inp-angle" value="0" min="-180" max="180" /></label>
+          <label>Max Speed: <input type="number" id="inp-speed" value="100" min="0" max="255" /></label>
           <div class="switches">
             <label><input type="checkbox" id="sw1"> SW1</label>
             <label><input type="checkbox" id="sw2"> SW2</label>
@@ -160,6 +156,6 @@
       </div>
     </section>
   </div>
-
+
 </body>
 </html>

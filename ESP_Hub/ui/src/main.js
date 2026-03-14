@@ -12,6 +12,13 @@ let startActive = false
 let cmdRateLimitMs = 20
 let lastCmdTs = 0
 
+// Joystick state
+let joystickSpeed = 0
+let joystickAngle = 0
+let joystickActive = false
+let joystickInterval = null
+const JOYSTICK_SEND_MS = 50
+
 // Telemetry stream map: name -> { current, min, max }
 const streams = new Map()
 
@@ -122,7 +129,7 @@ wsOn('ack', (msg) => {
   })
 })
 
-// ── Target selector ────────────────────────────────────────────
+// ── Global target selector (Bug 6) ────────────────────────────
 document.querySelectorAll('.btn-target').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.btn-target').forEach(b => b.classList.remove('active'))
@@ -131,14 +138,12 @@ document.querySelectorAll('.btn-target').forEach(btn => {
   })
 })
 
-// ── Directional pad ────────────────────────────────────────────
+// ── Control send helper ────────────────────────────────────────
 function _sendCtrl(overrides = {}) {
   const now = Date.now()
   if (now - lastCmdTs < cmdRateLimitMs) return
   lastCmdTs = now
 
-  const speed   = parseInt(document.getElementById('inp-speed').value, 10) || 0
-  const angle   = parseInt(document.getElementById('inp-angle').value, 10) || 0
   const sw1     = document.getElementById('sw1').checked ? 1 : 0
   const sw2     = document.getElementById('sw2').checked ? 2 : 0
   const sw3     = document.getElementById('sw3').checked ? 4 : 0
@@ -147,7 +152,7 @@ function _sendCtrl(overrides = {}) {
   wsSend({
     type: 'ctrl',
     data: JSON.stringify({
-      speed, angle,
+      speed: 0, angle: 0,
       sw,
       btn: 0,
       start: startActive ? 1 : 0,
@@ -157,18 +162,155 @@ function _sendCtrl(overrides = {}) {
   })
 }
 
-document.querySelectorAll('.dpad-btn').forEach(btn => {
-  btn.addEventListener('mousedown', () => {
-    const dir = btn.dataset.dir
-    const speedVal = parseInt(document.getElementById('inp-speed').value, 10) || 100
-    if (dir === 'up')    _sendCtrl({ speed: speedVal })
-    if (dir === 'down')  _sendCtrl({ speed: -speedVal })
-    if (dir === 'left')  _sendCtrl({ angle: -45 })
-    if (dir === 'right') _sendCtrl({ angle:  45 })
-    if (dir === 'ok')    _sendCtrl({})
+// ── Joystick (Bug 4 – replaces D-Pad) ─────────────────────────
+const joystickCanvas = document.getElementById('joystick')
+if (joystickCanvas) {
+  const ctx = joystickCanvas.getContext('2d')
+  const W = joystickCanvas.width
+  const H = joystickCanvas.height
+  const cx = W / 2
+  const cy = H / 2
+  const outerR = W / 2 - 4
+  const thumbR = 18
+  let thumbX = cx
+  let thumbY = cy
+
+  function _drawJoystick() {
+    ctx.clearRect(0, 0, W, H)
+    // Outer ring
+    ctx.beginPath()
+    ctx.arc(cx, cy, outerR, 0, Math.PI * 2)
+    ctx.strokeStyle = '#2e363b'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    // Cross-hair lines
+    ctx.beginPath()
+    ctx.moveTo(cx, cy - outerR + 10)
+    ctx.lineTo(cx, cy + outerR - 10)
+    ctx.moveTo(cx - outerR + 10, cy)
+    ctx.lineTo(cx + outerR - 10, cy)
+    ctx.strokeStyle = '#1a1f22'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    // Thumb
+    ctx.beginPath()
+    ctx.arc(thumbX, thumbY, thumbR, 0, Math.PI * 2)
+    ctx.fillStyle = joystickActive ? '#00e676' : '#5a6a72'
+    ctx.fill()
+    ctx.strokeStyle = joystickActive ? '#00c853' : '#2e363b'
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+
+  function _getPointerPos(e) {
+    const rect = joystickCanvas.getBoundingClientRect()
+    const touch = e.touches ? e.touches[0] : e
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
+    }
+  }
+
+  function _updateJoystick(px, py) {
+    let dx = px - cx
+    let dy = py - cy
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const maxDist = outerR - thumbR
+
+    // Clamp to outer circle
+    if (dist > maxDist) {
+      dx = (dx / dist) * maxDist
+      dy = (dy / dist) * maxDist
+    }
+
+    thumbX = cx + dx
+    thumbY = cy + dy
+
+    // Map to speed and angle
+    const maxSpeed = parseInt(document.getElementById('inp-speed').value, 10) || 100
+    const normDist = Math.min(dist, maxDist) / maxDist
+    joystickSpeed = Math.round(normDist * maxSpeed)
+
+    // Angle: 0=up, 90=right, 180/-180=down, -90=left (mathematical convention)
+    joystickAngle = Math.round(Math.atan2(dx, -dy) * (180 / Math.PI))
+
+    // Update display
+    document.getElementById('js-speed').textContent = joystickSpeed
+    document.getElementById('js-angle').textContent = joystickAngle
+
+    _drawJoystick()
+  }
+
+  function _startJoystick(e) {
+    e.preventDefault()
+    joystickActive = true
+    const pos = _getPointerPos(e)
+    _updateJoystick(pos.x, pos.y)
+    _startCyclicSend()
+  }
+
+  function _moveJoystick(e) {
+    if (!joystickActive) return
+    e.preventDefault()
+    const pos = _getPointerPos(e)
+    _updateJoystick(pos.x, pos.y)
+  }
+
+  function _stopJoystick() {
+    if (!joystickActive) return
+    joystickActive = false
+    joystickSpeed = 0
+    joystickAngle = 0
+    thumbX = cx
+    thumbY = cy
+
+    document.getElementById('js-speed').textContent = '0'
+    document.getElementById('js-angle').textContent = '0'
+
+    _drawJoystick()
+    _stopCyclicSend()
+    // Send stop command
+    _sendCtrl({ speed: 0, angle: 0 })
+  }
+
+  function _startCyclicSend() {
+    if (joystickInterval) return
+    joystickInterval = setInterval(() => {
+      if (joystickActive && joystickSpeed > 0) {
+        _sendCtrl({ speed: joystickSpeed, angle: joystickAngle })
+      }
+    }, JOYSTICK_SEND_MS)
+  }
+
+  function _stopCyclicSend() {
+    if (joystickInterval) {
+      clearInterval(joystickInterval)
+      joystickInterval = null
+    }
+  }
+
+  // Mouse events
+  joystickCanvas.addEventListener('mousedown', _startJoystick)
+  document.addEventListener('mousemove', _moveJoystick)
+  document.addEventListener('mouseup', _stopJoystick)
+
+  // Touch events
+  joystickCanvas.addEventListener('touchstart', _startJoystick)
+  document.addEventListener('touchmove', _moveJoystick, { passive: false })
+  document.addEventListener('touchend', _stopJoystick)
+
+  // Initial draw
+  _drawJoystick()
+}
+
+// ── Switch change listeners (Bug 3) ────────────────────────────
+;['sw1', 'sw2', 'sw3'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    _sendCtrl({ speed: joystickSpeed, angle: joystickAngle })
   })
 })
 
+// ── Action buttons ─────────────────────────────────────────────
 document.querySelectorAll('.btn-action').forEach(btn => {
   btn.addEventListener('click', () => {
     const b = 1 << (parseInt(btn.dataset.btn, 10) - 1)

@@ -38,6 +38,7 @@ body {
   padding: 8px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  gap: 12px;
 }
 
 .logo {
@@ -152,7 +153,41 @@ tr:hover td { background: var(--border); }
   align-items: center;
 }
 
-/* ── D-Pad ───────────────────────────────────────────────── */
+/* ── Global target selector ───────────────────────────────── */
+.target-sel-global {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Joystick ────────────────────────────────────────────── */
+.joystick-wrapper {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+#joystick {
+  border-radius: 50%;
+  border: 1px solid var(--border-hi);
+  background: #0c0e0f;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.joystick-info {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.joystick-info strong {
+  color: var(--green);
+}
+
+/* ── D-Pad (legacy, hidden by default) ───────────────────── */
 .dpad {
   display: grid;
   grid-template-areas:

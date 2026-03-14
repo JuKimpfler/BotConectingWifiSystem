@@ -93,7 +93,7 @@ void setup() {
     heartbeat.begin(hubCfg.heartbeat_interval_ms, hubCfg.heartbeat_timeout_ms);
 
     // Command router
-    router.begin(&ws, &espnow, &peers, &telem);
+    router.begin(&ws, &espnow, &peers, &telem, &cfgStore, &hubCfg);
 
     // WebSocket
     ws.onEvent(onWsEvent);
@@ -131,7 +131,7 @@ void setup() {
 
 // ─── Loop ─────────────────────────────────────────────────────
 void loop() {
-    ws.cleanupClients();
+    ws.cleanupClients(2);
     router.tick();
     heartbeat.tick(peers, EspNowManager::instance());
 }
