@@ -3,7 +3,7 @@ Buglist :
 1. Der Save Config Button macht nichts bzw scheint sich aufzuhängen. 
 2. Bei neu laden der Website wird der user als neuer user bzw als 2 oder 3 user angemeldet und die webui wird nichtmehr mit daten versorgt... 
 3. Die Texteingabe im Manual modus und die switches im Manual mode werden aktuell nicht geupdated und versendet. 
-4. Manual information soll zyclisch gesendet werden ( nur pfeiltasten nicht bt und sw daten. ) pfeiltasten sollen auch dauerhaft gedrückt werden können und die daten sollen wenn keine taste gedrückt wird soll ein Stop signal gesendet werden. 
+4. Manual information soll zyklisch gesendet werden ( nur pfeiltasten nicht bt und sw daten. ) pfeiltasten sollen auch dauerhaft gedrückt werden können. Quasi wie ein joystick mit welchem man den "Roboter" welher mit dem teensy gesteuert wird bewegen kann sobald V != 0 fahre mit Speed in Richtung von Pfeiltaste. ( Falls dies möglich ist und mit der laufzeit und rechenleistung kopatibel ist. ersetze die pfeiltaste durch einen Joystick um den ( mit omni wheels ausgerüsteten ) Roboter in jede richtung zu steuern ) 
 5. Angle ist aktuell immer als 45 gesendet nicht als eingegebener wert.
 6. Es soll eine allgemeine Auswahl möglichkeit zum wechsel zwischen sat1 und sat2 geben und nicht nur im manual mode. 
  
