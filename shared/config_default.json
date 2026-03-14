@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "channel": 6,
+  "pmk": "",
+  "peers": [],
+  "ui": {
+    "theme": "dark",
+    "rate_limit_ms": 20
+  },
+  "telemetry": {
+    "max_rate_hz": 20
+  },
+  "heartbeat": {
+    "interval_ms": 1000,
+    "timeout_ms": 4000
+  }
+}

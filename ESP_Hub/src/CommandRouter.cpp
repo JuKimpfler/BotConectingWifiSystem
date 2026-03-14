@@ -1,0 +1,217 @@
+// ============================================================
+//  ESP_Hub/src/CommandRouter.cpp
+//  Routes WebSocket JSON commands to ESP-NOW frames and back
+// ============================================================
+
+#include "CommandRouter.h"
+#include "messages.h"
+#include "crc16.h"
+#include <ArduinoJson.h>
+
+void CommandRouter::begin(AsyncWebSocket *ws, EspNowManager *espnow,
+                          PeerRegistry *peers, TelemetryBuffer *telem) {
+    _ws     = ws;
+    _espnow = espnow;
+    _peers  = peers;
+    _telem  = telem;
+}
+
+// ─── WebSocket inbound ──────────────────────────────────────
+void CommandRouter::onWsMessage(uint8_t *data, size_t len) {
+    JsonDocument doc;
+    if (deserializeJson(doc, data, len) != DeserializationError::Ok) return;
+
+    const char *type = doc["type"] | "";
+
+    if (strcmp(type, "ctrl")     == 0) _handleCtrl(doc["data"].as<const char *>());
+    else if (strcmp(type, "mode")     == 0) _handleMode(doc["data"].as<const char *>());
+    else if (strcmp(type, "cal")      == 0) _handleCal(doc["data"].as<const char *>());
+    else if (strcmp(type, "settings") == 0) _handleSettings(doc["data"].as<const char *>());
+    else if (strcmp(type, "pair")     == 0) _handlePair(doc["data"].as<const char *>());
+    else if (strcmp(type, "get_status") == 0) broadcastPeerStatus();
+}
+
+// ─── ESP-NOW inbound ────────────────────────────────────────
+void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
+    _peers->markOnline(mac, true);
+
+    switch (frame->msg_type) {
+    case MSG_DBG: {
+        const TelemetryEntry_t *entry =
+            reinterpret_cast<const TelemetryEntry_t *>(frame->payload);
+        _telem->ingest(entry);
+        break;
+    }
+    case MSG_ACK: {
+        const AckPayload_t *ack =
+            reinterpret_cast<const AckPayload_t *>(frame->payload);
+        char buf[64];
+        snprintf(buf, sizeof(buf),
+                 "{\"type\":\"ack\",\"seq\":%u,\"status\":%u,\"msg_type\":%u}",
+                 ack->ack_seq, ack->status, ack->msg_type);
+        if (_ws) _ws->textAll(buf);
+        break;
+    }
+    case MSG_HEARTBEAT:
+        broadcastPeerStatus();
+        break;
+    default:
+        break;
+    }
+}
+
+// ─── Periodic tick ───────────────────────────────────────────
+void CommandRouter::tick() {
+    if (_telem && _telem->tick()) {
+        _broadcastTelemetry();
+    }
+}
+
+void CommandRouter::broadcastPeerStatus() {
+    if (!_ws || !_peers) return;
+
+    JsonDocument doc;
+    doc["type"] = "peer_status";
+    JsonArray arr = doc["peers"].to<JsonArray>();
+    for (int i = 0; i < _peers->count(); i++) {
+        PeerInfo *p = _peers->get(i);
+        if (!p) continue;
+        JsonObject o = arr.add<JsonObject>();
+        o["name"]   = p->name;
+        o["role"]   = (p->role == ROLE_SAT1) ? "SAT1" : "SAT2";
+        o["online"] = p->online;
+        char macStr[18];
+        snprintf(macStr, sizeof(macStr),
+                 "%02X:%02X:%02X:%02X:%02X:%02X",
+                 p->mac[0], p->mac[1], p->mac[2],
+                 p->mac[3], p->mac[4], p->mac[5]);
+        o["mac"] = macStr;
+    }
+    char buf[512];
+    size_t n = serializeJson(doc, buf, sizeof(buf));
+    _ws->textAll(buf, n);
+}
+
+// ─── Private helpers ─────────────────────────────────────────
+void CommandRouter::_broadcastTelemetry() {
+    if (!_ws || !_telem) return;
+    int cnt = _telem->streamCount();
+    if (cnt == 0) return;
+
+    JsonDocument doc;
+    doc["type"] = "telemetry";
+    JsonArray arr = doc["streams"].to<JsonArray>();
+    for (int i = 0; i < cnt; i++) {
+        StreamStat *s = _telem->getStream(i);
+        if (!s || !s->valid) continue;
+        JsonObject o = arr.add<JsonObject>();
+        o["name"]    = s->name;
+        o["current"] = s->current;
+        o["min"]     = s->minVal;
+        o["max"]     = s->maxVal;
+    }
+    char buf[1024];
+    size_t n = serializeJson(doc, buf, sizeof(buf));
+    _ws->textAll(buf, n);
+}
+
+void CommandRouter::_handleCtrl(const char *json) {
+    if (!json) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+    CtrlPayload_t ctrl = {};
+    ctrl.speed       = doc["speed"]  | 0;
+    ctrl.angle       = doc["angle"]  | 0;
+    ctrl.switches    = doc["sw"]     | 0;
+    ctrl.buttons     = doc["btn"]    | 0;
+    ctrl.start       = doc["start"]  | 0;
+    ctrl.target_role = doc["target"] | (uint8_t)ROLE_SAT1;
+
+    _buildAndSend(ctrl.target_role, MSG_CTRL,
+                  (const uint8_t *)&ctrl, sizeof(ctrl), 0);
+}
+
+void CommandRouter::_handleMode(const char *json) {
+    if (!json) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+    ModePayload_t mode = {};
+    mode.mode_id     = doc["mode_id"]    | 1;
+    mode.target_role = doc["target"]     | (uint8_t)ROLE_SAT1;
+
+    _buildAndSend(mode.target_role, MSG_MODE,
+                  (const uint8_t *)&mode, sizeof(mode), FLAG_ACK_REQ);
+}
+
+void CommandRouter::_handleCal(const char *json) {
+    if (!json) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+    CalPayload_t cal = {};
+    cal.cal_cmd     = doc["cal_cmd"]  | CAL_IR_MAX;
+    cal.target_role = doc["target"]   | (uint8_t)ROLE_SAT1;
+
+    _buildAndSend(cal.target_role, MSG_CAL,
+                  (const uint8_t *)&cal, sizeof(cal), FLAG_ACK_REQ);
+}
+
+void CommandRouter::_handleSettings(const char *json) {
+    if (!json) return;
+    // Settings are applied locally and/or forwarded
+    // Actual implementation wires into ConfigStore
+    Serial.printf("[ROUTER] settings update: %s\n", json);
+}
+
+void CommandRouter::_handlePair(const char *json) {
+    if (!json) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+    PairPayload_t pair = {};
+    pair.action = doc["action"] | 0;
+    pair.role   = doc["role"]   | (uint8_t)ROLE_SAT1;
+    strlcpy(pair.name, doc["name"] | "", sizeof(pair.name));
+
+    uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    Frame_t frame = {};
+    frame.magic    = FRAME_MAGIC;
+    frame.msg_type = MSG_PAIR;
+    frame.seq      = _seq++;
+    frame.src_role = ROLE_HUB;
+    frame.dst_role = ROLE_BROADCAST;
+    frame.flags    = FLAG_ACK_REQ;
+    frame.len      = sizeof(PairPayload_t);
+    memcpy(frame.payload, &pair, sizeof(pair));
+
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+    memcpy(frame.payload + frame.len, &crc, 2);
+    _espnow->send(bcast, &frame);
+}
+
+void CommandRouter::_buildAndSend(uint8_t role, uint8_t msgType,
+                                   const uint8_t *payload, uint8_t payLen,
+                                   uint8_t flags) {
+    PeerInfo *peer = _peers->findByRole(role);
+    if (!peer || !peer->online) {
+        Serial.printf("[ROUTER] peer role %u not online\n", role);
+        return;
+    }
+
+    Frame_t frame = {};
+    frame.magic    = FRAME_MAGIC;
+    frame.msg_type = msgType;
+    frame.seq      = _seq++;
+    frame.src_role = ROLE_HUB;
+    frame.dst_role = role;
+    frame.flags    = flags;
+    frame.len      = payLen;
+    memcpy(frame.payload, payload, payLen);
+
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + payLen);
+    memcpy(frame.payload + payLen, &crc, 2);
+
+    _espnow->send(peer->mac, &frame);
+}
