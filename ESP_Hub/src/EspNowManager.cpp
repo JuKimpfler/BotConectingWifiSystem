@@ -29,6 +29,10 @@ bool EspNowManager::begin(uint8_t channel, const char *pmk16) {
     esp_now_register_send_cb(_onSent);
     esp_now_register_recv_cb(_onRecv);
 
+    // Register broadcast peer so discovery scans can be sent
+    uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    addPeer(bcast, nullptr);
+
     Serial.printf("[ESPNOW] ready ch=%u\n", channel);
     return true;
 }

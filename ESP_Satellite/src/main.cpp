@@ -151,11 +151,14 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             if (!g_hubKnown) {
                 memcpy(g_hubMac, mac, 6);
                 g_hubKnown = true;
+                // Register hub as ESP-NOW peer so we can send frames back
+                EspNowBridge::instance().addPeer(g_hubMac);
                 Preferences prefs;
                 prefs.begin(NVS_NAMESPACE, false);
                 prefs.putBytes(NVS_KEY_HUB_MAC, g_hubMac, 6);
                 prefs.end();
-                Serial.printf("[SAT] Hub MAC saved: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                Serial.printf("[SAT%d] Hub MAC saved: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                              SAT_ID,
                               mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
             }
         }
@@ -168,10 +171,10 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         char uartBuf[128];
         int n = parser.hubFrameToUart(frame, uartBuf, sizeof(uartBuf));
         if (n > 0) {
-            Serial.printf("[SAT%d] cmd type=0x%02X seq=%u -> UART: ",
-                          SAT_ID, frame->msg_type, frame->seq);
-            Serial.print(uartBuf);  // uartBuf already ends with '\n'
             TeensySerial.print(uartBuf);
+            // Mirror UART output to USB with "UART:" prefix for monitoring
+            Serial.print("UART: ");
+            Serial.print(uartBuf);
         } else {
             Serial.printf("[SAT%d] cmd type=0x%02X seq=%u – UART encode failed\n",
                           SAT_ID, frame->msg_type, frame->seq);
