@@ -1,22 +1,21 @@
 """
-PlatformIO extra script – automatically builds the Vite Web UI into
-ESP_Hub/data/ before the LittleFS image is created and uploaded.
+PlatformIO extra script for ESP_Hub filesystem handling.
 
-Triggered by:
-    pio run -e esp_hub -t uploadfs
-
-The script runs 'npm install' (only when node_modules/ is absent)
-and then 'npm run build' inside ESP_Hub/ui/.
+What it does:
+- Builds the Vite UI (ESP_Hub/ui -> ESP_Hub/data) before buildfs/uploadfs.
+- On normal firmware upload, triggers uploadfs first so UI updates are
+    flashed automatically as part of one upload workflow.
 """
 
 import os
 import subprocess
 import sys
+from SCons.Script import COMMAND_LINE_TARGETS
 
 Import("env")  # noqa: F821 – injected by PlatformIO
 
 
-def _build_ui(source, target, env):  # noqa: ARG001
+def _build_ui(env):
     project_dir = env.subst("$PROJECT_DIR")  # …/ESP_Hub
     ui_dir = os.path.join(project_dir, "ui")
 
@@ -44,5 +43,55 @@ def _build_ui(source, target, env):  # noqa: ARG001
     print("[pre_build_fs] Web UI build complete.")
 
 
-# Hook runs immediately before the LittleFS image is packed and uploaded
-env.AddPreAction("uploadfs", _build_ui)
+def _find_platformio_executable() -> str:
+    if sys.platform == "win32":
+        candidate = os.path.join(sys.prefix, "Scripts", "platformio.exe")
+        if os.path.isfile(candidate):
+            return candidate
+    else:
+        candidate = os.path.join(sys.prefix, "bin", "platformio")
+        if os.path.isfile(candidate):
+            return candidate
+
+    # Fallback when PlatformIO is in PATH
+    return "platformio"
+
+
+def _ensure_uploadfs_before_upload(source, target, env):  # noqa: ARG001
+    # Prevent accidental nested execution loops.
+    if os.environ.get("ESP_HUB_SKIP_AUTO_UPLOADFS") == "1":
+        return
+
+    pio = _find_platformio_executable()
+    pio_env = env.subst("$PIOENV")
+    cmd = [pio, "run", "-e", pio_env, "-t", "uploadfs"]
+
+    upload_port = env.subst("$UPLOAD_PORT").strip()
+    if upload_port:
+        cmd.extend(["--upload-port", upload_port])
+
+    child_env = os.environ.copy()
+    child_env["ESP_HUB_SKIP_AUTO_UPLOADFS"] = "1"
+    child_env["ESP_HUB_SKIP_UI_BUILD"] = "1"
+
+    print("[pre_build_fs] Auto-sync web files: running uploadfs before upload")
+    result = subprocess.run(cmd, cwd=env.subst("$PROJECT_DIR"), env=child_env)
+    if result.returncode != 0:
+        sys.exit("[pre_build_fs] ERROR: automatic 'uploadfs' failed")
+
+
+def _needs_ui_build() -> bool:
+    if os.environ.get("ESP_HUB_SKIP_UI_BUILD") == "1":
+        return False
+
+    requested = set(COMMAND_LINE_TARGETS)
+    return bool(requested.intersection({"buildfs", "uploadfs", "upload"}))
+
+
+# Run UI build immediately when filesystem-related targets are requested.
+# This guarantees data/ is fresh before any LittleFS image generation starts.
+if _needs_ui_build():
+    _build_ui(env)
+
+# A regular firmware upload should also refresh and upload filesystem content.
+env.AddPreAction("upload", _ensure_uploadfs_before_upload)
