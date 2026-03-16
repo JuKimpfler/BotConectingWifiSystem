@@ -41,9 +41,9 @@ int CommandParser::hubFrameToUart(const Frame_t *frame, char *outBuf, int maxLen
 // ─── Teensy UART line → hub telemetry frame ──────────────────
 bool CommandParser::uartLineToFrame(const char *line, uint8_t satId,
                                     Frame_t *outFrame) {
-    // Lines from Teensy with DBG prefix carry telemetry data
-    // Format: "DBG1:name=value" or "DBG2:name=value"
-    const char *prefix = (satId == 1) ? DBG_PREFIX_SAT1 : DBG_PREFIX_SAT2;
+    // Lines from Teensy with DBG: prefix carry telemetry data
+    // Format: "DBG:<name>=<value>"
+    const char *prefix = DBG_PREFIX;
     size_t prefixLen = strlen(prefix);
 
     if (strncmp(line, prefix, prefixLen) != 0) return false;

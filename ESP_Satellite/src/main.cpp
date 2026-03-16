@@ -91,24 +91,46 @@ static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     if (g_hubKnown) {
         bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
         if (g_monitorMode == MONITOR_BRIDGE) {
-            Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
+            Serial.printf("[SAT%d] %s DBG '", SAT_ID, srcLabel);
             Serial.print(line);
             Serial.printf("' -> hub %s\n", ok ? "ok" : "fail");
         }
     } else {
         if (g_monitorMode == MONITOR_BRIDGE || g_monitorMode == MONITOR_STATUS) {
-            Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
+            Serial.printf("[SAT%d] %s DBG '", SAT_ID, srcLabel);
             Serial.print(line);
             Serial.println("' – hub unknown, dropped");
         }
     }
-    if (g_peerKnown) {
-        EspNowBridge::instance().send(g_peerMac, &frame);
-        if (g_monitorMode == MONITOR_BRIDGE) {
-            Serial.printf("[SAT%d] %s telem -> peer forwarded\n", SAT_ID, srcLabel);
-        }
-    }
+    // DBG lines are NOT forwarded to peer satellite – they are hub-only telemetry
     return true;
+}
+
+// ─── Forward raw UART line to peer satellite (transparent bridge) ─
+static bool forwardUartRawToPeer(const char *line) {
+    if (!line || !g_peerKnown) return false;
+
+    size_t len = strlen(line);
+    if (len == 0 || len > FRAME_MAX_PAYLOAD) return false;
+
+    Frame_t frame = {};
+    frame.magic    = FRAME_MAGIC;
+    frame.msg_type = MSG_UART_RAW;
+    frame.seq      = g_seq++;
+    frame.src_role = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    frame.dst_role = (SAT_ID == 1) ? ROLE_SAT2 : ROLE_SAT1;
+    frame.flags    = 0;
+    frame.len      = (uint8_t)len;
+    memcpy(frame.payload, line, len);
+
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+    memcpy(frame.payload + frame.len, &crc, 2);
+
+    bool ok = EspNowBridge::instance().send(g_peerMac, &frame);
+    if (g_monitorMode == MONITOR_BRIDGE) {
+        Serial.printf("[SAT%d] UART raw -> peer %s\n", SAT_ID, ok ? "ok" : "fail");
+    }
+    return ok;
 }
 
 static void handleSerialCmd(const char *cmd) {
@@ -161,11 +183,11 @@ static void handleSerialCmd(const char *cmd) {
     } else if (strncasecmp(cmd, "help", 4) == 0) {
         Serial.printf("[SAT%d] USB commands: mac | info | debug | clearmac | Modi+Web | Modi+Bridge | Modi+Status | help\n", SAT_ID);
         Serial.printf("[SAT%d] Current monitor mode: %s\n", SAT_ID, monitorModeName(g_monitorMode));
-        Serial.printf("[SAT%d] USB telemetry inject: DBG%d:<name>=<value>\n", SAT_ID, SAT_ID);
+        Serial.printf("[SAT%d] USB telemetry inject: DBG:<name>=<value>\n", SAT_ID);
 #ifdef UART_BRIDGE_USB
         Serial.printf("[SAT%d] *** UART_BRIDGE_USB active – HW UART disabled ***\n", SAT_ID);
         Serial.printf("[SAT%d]   TX (hub->Teensy): printed here with [TX->USB] prefix\n", SAT_ID);
-        Serial.printf("[SAT%d]   RX (Teensy->hub): type DBG%d:<name>=<value> above\n", SAT_ID, SAT_ID);
+        Serial.printf("[SAT%d]   RX (Teensy->hub): type DBG:<name>=<value> above\n", SAT_ID);
 #endif
     } else if (g_monitorMode == MONITOR_WEB) {
         if (!forwardTelemetryLine(cmd, "USB")) {
@@ -192,7 +214,7 @@ static void handleSerialCmd(const char *cmd) {
             } else {
                 nameBuf[i] = '\0';
             }
-            snprintf(dbgLine, sizeof(dbgLine), "DBG%d:%s=1", SAT_ID, nameBuf);
+            snprintf(dbgLine, sizeof(dbgLine), "DBG:%s=1", nameBuf);
             if (!forwardTelemetryLine(dbgLine, "USB")) {
                 Serial.printf("[SAT%d] USB input could not be forwarded as debug telemetry\n", SAT_ID);
             }
@@ -339,6 +361,28 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         }
         break;
 
+    case MSG_UART_RAW: {
+        // Transparent UART bridge: raw data from peer satellite → Teensy UART
+        // Output without any prefix so the Teensy sees it as if it came directly
+        // from the other robot.
+        if (frame->len > 0 && frame->len <= FRAME_MAX_PAYLOAD) {
+            char rawBuf[FRAME_MAX_PAYLOAD + 2];
+            memcpy(rawBuf, frame->payload, frame->len);
+            rawBuf[frame->len] = '\n';
+#ifdef UART_BRIDGE_USB
+            Serial.printf("[SAT%d][RX-P2P] ", SAT_ID);
+            Serial.write((const uint8_t *)rawBuf, frame->len);
+            Serial.println();
+#else
+            TeensySerial.write((const uint8_t *)rawBuf, frame->len + 1);
+#endif
+            if (g_monitorMode == MONITOR_BRIDGE) {
+                Serial.printf("[SAT%d] P2P raw -> Teensy %u bytes\n", SAT_ID, frame->len);
+            }
+        }
+        break;
+    }
+
     case MSG_DISCOVERY: {
         const DiscoveryPayload_t *disc =
             reinterpret_cast<const DiscoveryPayload_t *>(frame->payload);
@@ -391,7 +435,7 @@ void setup() {
 #ifdef UART_BRIDGE_USB
     Serial.printf("[SAT%d] *** UART_BRIDGE_USB active – HW UART pins disabled ***\n", SAT_ID);
     Serial.printf("[SAT%d]   Commands to Teensy are printed here with [TX->USB] prefix.\n", SAT_ID);
-    Serial.printf("[SAT%d]   Simulate Teensy UART input by typing: DBG%d:<name>=<value>\n", SAT_ID, SAT_ID);
+    Serial.printf("[SAT%d]   Simulate Teensy UART input by typing: DBG:<name>=<value>\n", SAT_ID);
 #else
     TeensySerial.begin(HW_UART_BAUD, SERIAL_8N1, HW_UART_RX_PIN, HW_UART_TX_PIN);
 #endif
@@ -430,7 +474,14 @@ void loop() {
                     // In Web mode print exactly what arrives on UART
                     Serial.println(uartLine);
                 }
-                forwardTelemetryLine(uartLine, "UART");
+                // Route based on prefix:
+                // "DBG:" prefix → telemetry/debug to hub
+                // no prefix    → transparent P2P bridge to peer satellite
+                if (strncmp(uartLine, DBG_PREFIX, strlen(DBG_PREFIX)) == 0) {
+                    forwardTelemetryLine(uartLine, "UART");
+                } else {
+                    forwardUartRawToPeer(uartLine);
+                }
                 uartIdx = 0;
             }
         } else if (uartIdx < (int)(sizeof(uartLine) - 1)) {

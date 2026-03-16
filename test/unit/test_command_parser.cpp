@@ -82,8 +82,8 @@ int main() {
 
     // ── uartLineToFrame: int telemetry ────────────────────────
     Frame_t tFrame;
-    bool ok = p.uartLineToFrame("DBG1:Speed=200", 1, &tFrame);
-    CHECK(ok, "uartLineToFrame parses DBG1: line");
+    bool ok = p.uartLineToFrame("DBG:Speed=200", 1, &tFrame);
+    CHECK(ok, "uartLineToFrame parses DBG: line (SAT1)");
     CHECK(tFrame.msg_type == MSG_DBG, "Telemetry frame type = MSG_DBG");
     CHECK(tFrame.src_role == ROLE_SAT1, "Telemetry src_role = SAT1");
     const TelemetryEntry_t *te =
@@ -93,20 +93,27 @@ int main() {
     CHECK(te->value.i32 == 200, "Telemetry value = 200");
 
     // ── uartLineToFrame: float telemetry ─────────────────────
-    ok = p.uartLineToFrame("DBG2:Angle=3.1416", 2, &tFrame);
-    CHECK(ok, "uartLineToFrame parses DBG2: float line");
+    ok = p.uartLineToFrame("DBG:Angle=3.1416", 2, &tFrame);
+    CHECK(ok, "uartLineToFrame parses DBG: float line (SAT2)");
     CHECK(tFrame.src_role == ROLE_SAT2, "Telemetry src_role = SAT2");
     const TelemetryEntry_t *tf =
         reinterpret_cast<const TelemetryEntry_t *>(tFrame.payload);
     CHECK(tf->vtype == 1, "Float telemetry type = 1");
     CHECK(tf->value.f32 > 3.1f && tf->value.f32 < 3.2f, "Float value ~3.14");
 
+    // ── uartLineToFrame: legacy DBG1:/DBG2: prefixes rejected ─
+    ok = p.uartLineToFrame("DBG1:Speed=200", 1, &tFrame);
+    CHECK(!ok, "uartLineToFrame rejects legacy DBG1: prefix");
+
+    ok = p.uartLineToFrame("DBG2:Angle=45", 2, &tFrame);
+    CHECK(!ok, "uartLineToFrame rejects legacy DBG2: prefix");
+
     // ── uartLineToFrame: wrong prefix ────────────────────────
     ok = p.uartLineToFrame("RAW:blah", 1, &tFrame);
     CHECK(!ok, "uartLineToFrame rejects wrong prefix");
 
     // ── uartLineToFrame: empty name rejected ─────────────────
-    ok = p.uartLineToFrame("DBG1:=42", 1, &tFrame);
+    ok = p.uartLineToFrame("DBG:=42", 1, &tFrame);
     CHECK(!ok, "uartLineToFrame rejects empty telemetry name");
 
     printf("\nResult: %d/%d tests passed\n", g_pass, g_tests);
