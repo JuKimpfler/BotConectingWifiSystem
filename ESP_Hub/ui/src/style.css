@@ -315,10 +315,21 @@ button:active { opacity: 0.7; }
 .peer-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 4px 0;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
+}
+
+.peer-name-input {
+  max-width: 110px;
+}
+
+.btn-peer-rename,
+.btn-peer-delete {
+  font-size: 11px;
+  padding: 4px 8px;
 }
 
 #scan-results { margin-top: 8px; min-height: 20px; font-size: 12px; }

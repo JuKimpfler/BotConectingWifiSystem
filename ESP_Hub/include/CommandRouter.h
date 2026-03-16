@@ -46,6 +46,9 @@ private:
     void _handleSettings(const char *json);
     void _handlePair(const char *json);
     void _handleAddPeer(const char *json);
+    void _handleRenamePeer(const char *json);
+    void _handleDeletePeer(const char *json);
+    void _handleClearPeers();
     void _broadcastTelemetry();
     void _buildAndSend(uint8_t role, uint8_t msgType,
                        const uint8_t *payload, uint8_t payLen,

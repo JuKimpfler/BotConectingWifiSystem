@@ -86,11 +86,59 @@ wsOn('peer_status', (msg) => {
 
     const div = document.createElement('div')
     div.className = 'peer-item'
-    div.innerHTML = `
-      <span class="badge ${p.online ? 'online' : 'offline'}">${p.role}</span>
-      <span>${p.name || '—'}</span>
-      <span style="color:var(--text-dim);font-size:11px">${p.mac || ''}</span>
-    `
+    const roleTag = document.createElement('span')
+    roleTag.className = `badge ${p.online ? 'online' : 'offline'}`
+    roleTag.textContent = p.role || 'SAT'
+    div.appendChild(roleTag)
+
+    const nameInput = document.createElement('input')
+    nameInput.className = 'peer-name-input'
+    nameInput.type = 'text'
+    nameInput.maxLength = 16
+    nameInput.value = p.name || ''
+    div.appendChild(nameInput)
+
+    const macTag = document.createElement('span')
+    macTag.style.color = 'var(--text-dim)'
+    macTag.style.fontSize = '11px'
+    macTag.textContent = p.mac || ''
+    div.appendChild(macTag)
+
+    const renameBtn = document.createElement('button')
+    renameBtn.className = 'btn-peer-rename'
+    renameBtn.textContent = 'Rename'
+    div.appendChild(renameBtn)
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'btn-peer-delete btn-danger'
+    deleteBtn.textContent = 'Delete'
+    div.appendChild(deleteBtn)
+
+    renameBtn.addEventListener('click', () => {
+      const name = nameInput.value.trim()
+      if (!name) {
+        settingsFeedback.textContent = 'Peer name must not be empty'
+        settingsFeedback.className = 'feedback error'
+        return
+      }
+      if (!wsSend({ type: 'rename_peer', data: JSON.stringify({ mac: p.mac, name }) })) {
+        settingsFeedback.textContent = 'Error: WebSocket not connected'
+        settingsFeedback.className = 'feedback error'
+        return
+      }
+      settingsFeedback.textContent = `Renamed peer ${p.mac}`
+      settingsFeedback.className = 'feedback'
+    })
+    deleteBtn.addEventListener('click', () => {
+      if (!confirm(`Delete peer ${p.name || p.role}?`)) return
+      if (!wsSend({ type: 'delete_peer', data: JSON.stringify({ mac: p.mac }) })) {
+        settingsFeedback.textContent = 'Error: WebSocket not connected'
+        settingsFeedback.className = 'feedback error'
+        return
+      }
+      settingsFeedback.textContent = `Deleted peer ${p.mac}`
+      settingsFeedback.className = 'feedback'
+    })
     peerList.appendChild(div)
   })
 })
@@ -147,6 +195,11 @@ wsOn('ack', (msg) => {
   })
 })
 
+wsOn('error', (msg) => {
+  settingsFeedback.textContent = msg.msg || 'Unknown error'
+  settingsFeedback.className = 'feedback error'
+})
+
 // ── Global target selector (Bug 6) ────────────────────────────
 document.querySelectorAll('.btn-target').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -157,15 +210,18 @@ document.querySelectorAll('.btn-target').forEach(btn => {
 })
 
 // ── Control send helper ────────────────────────────────────────
-function _sendCtrl(overrides = {}, force = false) {
+function _sendCtrl(overrides = {}, force = false, includeSwitches = true) {
   const now = Date.now()
   if (!force && now - lastCmdTs < cmdRateLimitMs) return
   lastCmdTs = now
 
-  const sw1     = document.getElementById('sw1').checked ? 1 : 0
-  const sw2     = document.getElementById('sw2').checked ? 2 : 0
-  const sw3     = document.getElementById('sw3').checked ? 4 : 0
-  const sw      = sw1 | sw2 | sw3
+  let sw = 0
+  if (includeSwitches) {
+    const sw1 = document.getElementById('sw1').checked ? 1 : 0
+    const sw2 = document.getElementById('sw2').checked ? 2 : 0
+    const sw3 = document.getElementById('sw3').checked ? 4 : 0
+    sw = sw1 | sw2 | sw3
+  }
 
   wsSend({
     type: 'ctrl',
@@ -294,8 +350,8 @@ if (joystickCanvas) {
   function _startCyclicSend() {
     if (joystickInterval) return
     joystickInterval = setInterval(() => {
-      if (joystickActive && joystickSpeed > 0) {
-        _sendCtrl({ speed: joystickSpeed, angle: joystickAngle })
+      if (joystickActive) {
+        _sendCtrl({ speed: joystickSpeed, angle: joystickAngle }, false, false)
       }
     }, JOYSTICK_SEND_MS)
   }
@@ -471,6 +527,17 @@ document.getElementById('btn-factory-reset').addEventListener('click', () => {
   fetch('/api/factory_reset', { method: 'POST' })
     .then(() => { settingsFeedback.textContent = 'Factory reset – rebooting…' })
     .catch(() => { settingsFeedback.textContent = 'Reset failed' })
+})
+
+document.getElementById('btn-reset-peers').addEventListener('click', () => {
+  if (!confirm('Delete all connected satellites from this hub?')) return
+  if (!wsSend({ type: 'clear_peers', data: '{}' })) {
+    settingsFeedback.textContent = 'Error: WebSocket not connected'
+    settingsFeedback.className = 'feedback error'
+    return
+  }
+  settingsFeedback.textContent = 'All peers removed'
+  settingsFeedback.className = 'feedback'
 })
 
 // ── Boot ──────────────────────────────────────────────────────
