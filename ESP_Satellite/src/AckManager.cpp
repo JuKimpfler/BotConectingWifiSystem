@@ -19,6 +19,7 @@ void AckManager::begin() {
 }
 
 bool AckManager::track(const uint8_t *mac, const Frame_t *frame, uint8_t frameLen) {
+    if (frameLen > sizeof(_queue[0].frameData)) return false;  // bounds check
     for (int i = 0; i < ACK_QUEUE_SIZE; i++) {
         if (!_queue[i].active) {
             _queue[i].seq      = frame->seq;

@@ -365,6 +365,7 @@ void CommandRouter::_buildAndSend(uint8_t role, uint8_t msgType,
     frame.dst_role = role;
     frame.flags    = flags;
     frame.len      = payLen;
+    if (payLen > FRAME_MAX_PAYLOAD) return;  // bounds check
     memcpy(frame.payload, payload, payLen);
 
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + payLen);

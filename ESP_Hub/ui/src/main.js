@@ -22,6 +22,19 @@ const JOYSTICK_SEND_MS = 50
 // Telemetry stream map: name -> { current, min, max }
 const streams = new Map()
 
+// ── Load saved config into settings form (Bug 2) ──────────────
+function _loadConfig() {
+  fetch('/api/config')
+    .then(r => { if (r.ok) return r.json(); throw new Error('no config') })
+    .then(cfg => {
+      if (cfg.channel != null)
+        document.getElementById('cfg-channel').value = cfg.channel
+      if (cfg.telemetry && cfg.telemetry.max_rate_hz != null)
+        document.getElementById('cfg-telem-hz').value = cfg.telemetry.max_rate_hz
+    })
+    .catch(() => { /* first boot – use form defaults */ })
+}
+
 // ── UI references ─────────────────────────────────────────────
 const wsBadge    = document.getElementById('ws-status')
 const sat1Badge  = document.getElementById('badge-sat1')
@@ -48,6 +61,8 @@ document.querySelectorAll('.tab').forEach(btn => {
 wsOn('ws_open', () => {
   wsBadge.textContent = 'WS ●'
   wsBadge.className = 'badge online'
+  // Load current config into settings form (Bug 2)
+  _loadConfig()
 })
 
 wsOn('ws_close', () => {
@@ -142,9 +157,9 @@ document.querySelectorAll('.btn-target').forEach(btn => {
 })
 
 // ── Control send helper ────────────────────────────────────────
-function _sendCtrl(overrides = {}) {
+function _sendCtrl(overrides = {}, force = false) {
   const now = Date.now()
-  if (now - lastCmdTs < cmdRateLimitMs) return
+  if (!force && now - lastCmdTs < cmdRateLimitMs) return
   lastCmdTs = now
 
   const sw1     = document.getElementById('sw1').checked ? 1 : 0
@@ -309,15 +324,20 @@ if (joystickCanvas) {
 // ── Switch change listeners (Bug 3) ────────────────────────────
 ;['sw1', 'sw2', 'sw3'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
-    _sendCtrl({ speed: joystickSpeed, angle: joystickAngle })
+    _sendCtrl({ speed: joystickSpeed, angle: joystickAngle }, true)
   })
+})
+
+// ── Speed input change listener (Bug 3) ────────────────────────
+document.getElementById('inp-speed').addEventListener('change', () => {
+  _sendCtrl({ speed: joystickSpeed, angle: joystickAngle }, true)
 })
 
 // ── Action buttons ─────────────────────────────────────────────
 document.querySelectorAll('.btn-action').forEach(btn => {
   btn.addEventListener('click', () => {
     const b = 1 << (parseInt(btn.dataset.btn, 10) - 1)
-    _sendCtrl({ btn: b })
+    _sendCtrl({ btn: b }, true)
   })
 })
 
@@ -326,17 +346,21 @@ document.getElementById('btn-start').addEventListener('click', function () {
   startActive = !startActive
   this.classList.toggle('active', startActive)
   this.textContent = startActive ? '■ STOP' : 'START'
-  _sendCtrl({})
+  _sendCtrl({}, true)
 })
 
 // ── Mode buttons ──────────────────────────────────────────────
 document.querySelectorAll('.btn-mode').forEach(btn => {
   btn.addEventListener('click', () => {
     const modeId = parseInt(btn.dataset.mode, 10)
-    wsSend({
+    if (!wsSend({
       type: 'mode',
       data: JSON.stringify({ mode_id: modeId, target: targetRole })
-    })
+    })) {
+      modeFeedback.textContent = 'Error: WebSocket not connected'
+      modeFeedback.className = 'feedback error'
+      return
+    }
     modeFeedback.textContent = `Sent mode ${modeId}…`
     modeFeedback.className = 'feedback'
   })
@@ -346,26 +370,55 @@ document.querySelectorAll('.btn-mode').forEach(btn => {
 document.querySelectorAll('.btn-cal').forEach(btn => {
   btn.addEventListener('click', () => {
     const calCmd = parseInt(btn.dataset.cal, 10)
-    wsSend({
+    if (!wsSend({
       type: 'cal',
       data: JSON.stringify({ cal_cmd: calCmd, target: targetRole })
-    })
+    })) {
+      calFeedback.textContent = 'Error: WebSocket not connected'
+      calFeedback.className = 'feedback error'
+      return
+    }
     calFeedback.textContent = `Sent cal cmd ${calCmd}…`
     calFeedback.className = 'feedback'
   })
 })
 
 // ── Settings ──────────────────────────────────────────────────
+let _settingsAckTimer = null
+
 document.getElementById('btn-save-cfg').addEventListener('click', () => {
   const channel = parseInt(document.getElementById('cfg-channel').value, 10)
   const pmk     = document.getElementById('cfg-pmk').value.trim()
   const hz      = parseInt(document.getElementById('cfg-telem-hz').value, 10)
-  wsSend({
+
+  if (!wsSend({
     type: 'settings',
     data: JSON.stringify({ channel, pmk, telemetry_max_hz: hz })
-  })
+  })) {
+    settingsFeedback.textContent = 'Error: WebSocket not connected'
+    settingsFeedback.className = 'feedback error'
+    return
+  }
+
   settingsFeedback.textContent = 'Sent settings…'
   settingsFeedback.className = 'feedback'
+
+  // Timeout: show error if no ACK arrives within 5 s
+  if (_settingsAckTimer) clearTimeout(_settingsAckTimer)
+  _settingsAckTimer = setTimeout(() => {
+    if (settingsFeedback.textContent === 'Sent settings…') {
+      settingsFeedback.textContent = 'Timeout – no ACK received'
+      settingsFeedback.className = 'feedback error'
+    }
+  }, 5000)
+})
+
+// Clear ACK timeout when a settings ACK arrives
+wsOn('ack', (msg) => {
+  if (_settingsAckTimer && msg.msg_type === 9) {
+    clearTimeout(_settingsAckTimer)
+    _settingsAckTimer = null
+  }
 })
 
 // ── Scan for peers ────────────────────────────────────────────

@@ -55,6 +55,7 @@ bool CommandParser::uartLineToFrame(const char *line, uint8_t satId,
 
     TelemetryEntry_t entry = {};
     size_t nameLen = eq - payload;
+    if (nameLen == 0) return false;  // reject empty names
     if (nameLen >= sizeof(entry.name)) nameLen = sizeof(entry.name) - 1;
     memcpy(entry.name, payload, nameLen);
     entry.name[nameLen] = '\0';
