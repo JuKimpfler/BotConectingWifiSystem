@@ -50,6 +50,8 @@ enum MonitorMode : uint8_t {
     MONITOR_STATUS,
 };
 
+constexpr size_t TELEMETRY_NAME_LEN = 16;  // Must match TelemetryEntry_t::name
+
 static MonitorMode g_monitorMode = MONITOR_WEB;  // Default mode at startup
 
 static const char *monitorModeName(MonitorMode mode) {
@@ -163,16 +165,17 @@ static void handleSerialCmd(const char *cmd) {
     } else if (g_monitorMode == MONITOR_WEB) {
         if (!forwardTelemetryLine(cmd, "USB")) {
             char dbgLine[UART_RX_BUF_SIZE];
-            char nameBuf[16];
+            char nameBuf[TELEMETRY_NAME_LEN];
             size_t i = 0;
-            for (size_t j = 0; cmd[j] != '\0' && i < (sizeof(nameBuf) - 1); ++j) {
+            for (size_t j = 0; cmd[j] != '\0'; ++j) {
+                if (i >= (TELEMETRY_NAME_LEN - 1)) break;
                 char ch = cmd[j];
                 if ((ch >= '0' && ch <= '9') ||
                     (ch >= 'A' && ch <= 'Z') ||
                     (ch >= 'a' && ch <= 'z') ||
                     ch == '_') {
                     nameBuf[i++] = ch;
-                } else if (i > 0 && nameBuf[i - 1] != '_') {
+                } else if (i > 0 && i < (TELEMETRY_NAME_LEN - 1) && nameBuf[i - 1] != '_') {
                     nameBuf[i++] = '_';
                 }
             }
