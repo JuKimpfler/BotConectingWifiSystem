@@ -27,7 +27,7 @@ public:
     bool factoryReset();
 
     static void hexToBytes(const char *hex, uint8_t *out, int len);
-    static void bytesToHex(const uint8_t *in, int len, char *out);
+    static void bytesToHex(const uint8_t *in, int len, char *out, size_t outLen);
 
 private:
     bool _readNvsSecret(const char *key, char *out, size_t maxLen);

@@ -67,6 +67,19 @@ int main() {
     CHECK(n > 0, "hubFrameToUart CAL produces output");
     CHECK(strstr(outBuf, "CAL_IR_MAX") != nullptr, "CAL output is 'CAL_IR_MAX'");
 
+    // ── hubFrameToUart: CAL invalid cmd produces empty string ─
+    CalPayload_t calInvalid = {0, ROLE_SAT1};
+    memcpy(calFrame.payload, &calInvalid, sizeof(calInvalid));
+    n = p.hubFrameToUart(&calFrame, outBuf, sizeof(outBuf));
+    CHECK(n == 0, "CAL invalid cmd (0) produces no output");
+    CHECK(outBuf[0] == '\0', "CAL invalid cmd (0) buffer is empty");
+
+    CalPayload_t calInvalid2 = {CAL_BNO + 1, ROLE_SAT1};
+    memcpy(calFrame.payload, &calInvalid2, sizeof(calInvalid2));
+    n = p.hubFrameToUart(&calFrame, outBuf, sizeof(outBuf));
+    CHECK(n == 0, "CAL out-of-range cmd produces no output");
+    CHECK(outBuf[0] == '\0', "CAL out-of-range cmd buffer is empty");
+
     // ── uartLineToFrame: int telemetry ────────────────────────
     Frame_t tFrame;
     bool ok = p.uartLineToFrame("DBG1:Speed=200", 1, &tFrame);

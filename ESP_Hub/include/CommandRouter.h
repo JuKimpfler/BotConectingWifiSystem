@@ -46,7 +46,6 @@ private:
     void _handleSettings(const char *json);
     void _handlePair(const char *json);
     void _handleAddPeer(const char *json);
-    void _sendAckToUi(uint8_t seq, uint8_t status, const char *label);
     void _broadcastTelemetry();
     void _buildAndSend(uint8_t role, uint8_t msgType,
                        const uint8_t *payload, uint8_t payLen,
