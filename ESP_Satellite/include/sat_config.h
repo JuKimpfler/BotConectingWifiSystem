@@ -52,7 +52,7 @@
 //     are instead printed to USB Serial with a [TX->USB] prefix.
 //   • Telemetry input that normally arrives from the Teensy via HW UART
 //     is instead entered through USB Serial using the existing USB command
-//     handler (type "DBG1:<name>=<value>" or "DBG2:<name>=<value>").
+//     handler (type "DBG:<name>=<value>").
 // Without this flag, HW UART communicates normally with the Teensy and
 // USB Serial continues to output debug/monitor data as usual.
 // Enable by adding -DUART_BRIDGE_USB to build_flags in platformio.ini,

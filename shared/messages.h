@@ -27,6 +27,7 @@
 #define MSG_ERROR           0x08  // Error response
 #define MSG_SETTINGS        0x09  // Settings update (ACK required)
 #define MSG_DISCOVERY       0x0A  // Peer discovery broadcast
+#define MSG_UART_RAW        0x0B  // Transparent UART bridge data (SAT1 <-> SAT2, no ACK)
 
 // ── Flag bits ───────────────────────────────────────────────
 #define FLAG_ACK_REQ        0x01  // Sender requests ACK
@@ -48,7 +49,13 @@
 #define FRAME_MAX_PAYLOAD   180
 #define FRAME_MAGIC         0xBE  // Start-of-frame magic byte
 
-// ── DBG UART prefix constants (also in sat_config.h) ─────────
+// ── DBG UART prefix constants ─────────────────────────────────
+// Unified debug prefix for telemetry lines from the Teensy.
+// Lines with this prefix are sent as MSG_DBG to the hub.
+// Lines without this prefix are forwarded as MSG_UART_RAW to the peer satellite
+// (transparent UART bridge, SAT1 <-> SAT2).
+#define DBG_PREFIX           "DBG:"
+// Legacy aliases (kept for backward compatibility; use DBG_PREFIX in new code)
 #define DBG_PREFIX_SAT1      "DBG1:"
 #define DBG_PREFIX_SAT2      "DBG2:"
 
