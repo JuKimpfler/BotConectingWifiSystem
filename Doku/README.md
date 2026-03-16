@@ -1,5 +1,8 @@
 # BotConnectingWifiSystem – Documentation
 
+Weitere Dokumente:
+- [USB_PROTOCOL.md](./USB_PROTOCOL.md) – USB-Befehle und USB-Telemetrie-Weiterleitung am Satellite
+
 ## Overview
 
 A 3-node ESP-NOW mesh consisting of:

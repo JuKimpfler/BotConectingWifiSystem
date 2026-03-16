@@ -8,6 +8,14 @@
 #include "crc16.h"
 #include <ArduinoJson.h>
 
+static bool parseMacStr(const char *macStr, uint8_t out[6]) {
+    if (!macStr || !out) return false;
+    return sscanf(macStr,
+                  "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                  &out[0], &out[1], &out[2],
+                  &out[3], &out[4], &out[5]) == 6;
+}
+
 void CommandRouter::begin(AsyncWebSocket *ws, EspNowManager *espnow,
                           PeerRegistry *peers, TelemetryBuffer *telem,
                           ConfigStore *cfgStore, HubConfig *hubCfg) {
@@ -32,6 +40,9 @@ void CommandRouter::onWsMessage(uint8_t *data, size_t len) {
     else if (strcmp(type, "settings")   == 0) _handleSettings(doc["data"].as<const char *>());
     else if (strcmp(type, "pair")       == 0) _handlePair(doc["data"].as<const char *>());
     else if (strcmp(type, "add_peer")   == 0) _handleAddPeer(doc["data"].as<const char *>());
+    else if (strcmp(type, "rename_peer") == 0) _handleRenamePeer(doc["data"].as<const char *>());
+    else if (strcmp(type, "delete_peer") == 0) _handleDeletePeer(doc["data"].as<const char *>());
+    else if (strcmp(type, "clear_peers") == 0) _handleClearPeers();
     else if (strcmp(type, "get_status") == 0) broadcastPeerStatus();
 }
 
@@ -327,9 +338,7 @@ void CommandRouter::_handleAddPeer(const char *json) {
     uint8_t role       = doc["role"] | (uint8_t)ROLE_SAT1;
 
     uint8_t mac[6] = {};
-    if (sscanf(macStr,
-               "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-               &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6) {
+    if (!parseMacStr(macStr, mac)) {
         Serial.printf("[ROUTER] add_peer: invalid MAC '%s'\n", macStr);
         if (_ws) _ws->textAll("{\"type\":\"error\",\"msg\":\"Invalid MAC address\"}");
         return;
@@ -345,6 +354,69 @@ void CommandRouter::_handleAddPeer(const char *json) {
     _espnow->addPeer(mac, nullptr);
 
     Serial.printf("[ROUTER] Manual peer added: name=%s role=%u mac=%s\n", name, role, macStr);
+    if (_cfgStore && _hubCfg) _cfgStore->save(*_hubCfg, *_peers);
+    broadcastPeerStatus();
+}
+
+void CommandRouter::_handleRenamePeer(const char *json) {
+    if (!json) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+    const char *macStr = doc["mac"]  | "";
+    const char *name   = doc["name"] | "";
+    if (name[0] == '\0') {
+        if (_ws) _ws->textAll("{\"type\":\"error\",\"msg\":\"Name must not be empty\"}");
+        return;
+    }
+
+    uint8_t mac[6] = {};
+    if (!parseMacStr(macStr, mac)) {
+        if (_ws) _ws->textAll("{\"type\":\"error\",\"msg\":\"Invalid MAC address\"}");
+        return;
+    }
+
+    PeerInfo *peer = _peers ? _peers->findByMac(mac) : nullptr;
+    if (!peer) {
+        if (_ws) _ws->textAll("{\"type\":\"error\",\"msg\":\"Peer not found\"}");
+        return;
+    }
+
+    strlcpy(peer->name, name, sizeof(peer->name));
+    if (_cfgStore && _hubCfg) _cfgStore->save(*_hubCfg, *_peers);
+    Serial.printf("[ROUTER] Peer renamed: %s -> %s\n", macStr, peer->name);
+    broadcastPeerStatus();
+}
+
+void CommandRouter::_handleDeletePeer(const char *json) {
+    if (!json) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+    const char *macStr = doc["mac"] | "";
+    uint8_t mac[6] = {};
+    if (!parseMacStr(macStr, mac)) {
+        if (_ws) _ws->textAll("{\"type\":\"error\",\"msg\":\"Invalid MAC address\"}");
+        return;
+    }
+
+    bool removed = _peers && _peers->remove(mac);
+    if (removed && _espnow) _espnow->removePeer(mac);
+    if (removed && _cfgStore && _hubCfg) _cfgStore->save(*_hubCfg, *_peers);
+    Serial.printf("[ROUTER] Delete peer %s: %s\n", macStr, removed ? "ok" : "not found");
+    broadcastPeerStatus();
+}
+
+void CommandRouter::_handleClearPeers() {
+    if (!_peers) return;
+    for (int i = _peers->count() - 1; i >= 0; --i) {
+        PeerInfo *p = _peers->get(i);
+        if (!p) continue;
+        if (_espnow) _espnow->removePeer(p->mac);
+    }
+    _peers->clear();
+    if (_cfgStore && _hubCfg) _cfgStore->save(*_hubCfg, *_peers);
+    Serial.println("[ROUTER] All peers cleared");
     broadcastPeerStatus();
 }
 

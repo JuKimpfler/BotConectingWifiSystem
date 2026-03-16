@@ -44,6 +44,28 @@ static uint32_t g_lastP2pSend = 0;
 static char s_serialCmdBuf[64];
 static int  s_serialCmdIdx = 0;
 
+static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
+    if (!line || !srcLabel) return false;
+    Frame_t frame;
+    if (!parser.uartLineToFrame(line, SAT_ID, &frame)) return false;
+    frame.seq = g_seq++;
+
+    if (g_hubKnown) {
+        bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
+        Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
+        Serial.print(line);
+        Serial.printf("' -> hub %s\n", ok ? "ok" : "fail");
+    } else {
+        Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
+        Serial.print(line);
+        Serial.println("' – hub unknown, dropped");
+    }
+    if (g_peerKnown) {
+        EspNowBridge::instance().send(g_peerMac, &frame);
+    }
+    return true;
+}
+
 static void handleSerialCmd(const char *cmd) {
     if (strncasecmp(cmd, "mac", 3) == 0 || strncasecmp(cmd, "info", 4) == 0) {
         Serial.printf("[SAT%d] Own MAC : %s\n", SAT_ID, WiFi.macAddress().c_str());
@@ -89,6 +111,9 @@ static void handleSerialCmd(const char *cmd) {
         Serial.printf("[SAT%d] Stored MACs cleared\n", SAT_ID);
     } else if (strncasecmp(cmd, "help", 4) == 0) {
         Serial.printf("[SAT%d] USB commands: mac | info | debug | clearmac | help\n", SAT_ID);
+        Serial.printf("[SAT%d] USB telemetry inject: DBG%d:<name>=<value>\n", SAT_ID, SAT_ID);
+    } else if (forwardTelemetryLine(cmd, "USB")) {
+        // accepted and forwarded as telemetry input, as if it came from hardware UART
     } else {
         Serial.printf("[SAT%d] Unknown command '%s'. Type 'help'.\n", SAT_ID, cmd);
     }
@@ -290,25 +315,7 @@ void loop() {
         if (c == '\n' || c == '\r') {
             if (uartIdx > 0) {
                 uartLine[uartIdx] = '\0';
-                Frame_t frame;
-                if (parser.uartLineToFrame(uartLine, SAT_ID, &frame)) {
-                    frame.seq = g_seq++;
-                    // Send telemetry to hub
-                    if (g_hubKnown) {
-                        bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
-                        Serial.printf("[SAT%d] UART telem '", SAT_ID);
-                        Serial.print(uartLine);
-                        Serial.printf("' -> hub %s\n", ok ? "ok" : "fail");
-                    } else {
-                        Serial.printf("[SAT%d] UART telem '", SAT_ID);
-                        Serial.print(uartLine);
-                        Serial.println("' – hub unknown, dropped");
-                    }
-                    // Forward to peer satellite (P2P bridge)
-                    if (g_peerKnown) {
-                        EspNowBridge::instance().send(g_peerMac, &frame);
-                    }
-                }
+                forwardTelemetryLine(uartLine, "UART");
                 uartIdx = 0;
             }
         } else if (uartIdx < (int)(sizeof(uartLine) - 1)) {
