@@ -44,6 +44,42 @@ static uint32_t g_lastP2pSend = 0;
 static char s_serialCmdBuf[64];
 static int  s_serialCmdIdx = 0;
 
+enum MonitorMode : uint8_t {
+    MONITOR_WEB = 0,
+    MONITOR_BRIDGE,
+    MONITOR_STATUS,
+};
+
+static MonitorMode g_monitorMode = MONITOR_WEB;  // Default mode at startup
+
+static const char *monitorModeName(MonitorMode mode) {
+    switch (mode) {
+        case MONITOR_WEB:    return "Web";
+        case MONITOR_BRIDGE: return "Bridge";
+        case MONITOR_STATUS: return "Status";
+        default:             return "Unknown";
+    }
+}
+
+static bool tryParseMonitorMode(const char *cmd, MonitorMode *outMode) {
+    if (!cmd || !outMode) return false;
+    if (strncasecmp(cmd, "modi+", 5) != 0) return false;
+    const char *modeStr = cmd + 5;
+    if (strncasecmp(modeStr, "web", 3) == 0) {
+        *outMode = MONITOR_WEB;
+        return true;
+    }
+    if (strncasecmp(modeStr, "bridge", 6) == 0) {
+        *outMode = MONITOR_BRIDGE;
+        return true;
+    }
+    if (strncasecmp(modeStr, "status", 6) == 0) {
+        *outMode = MONITOR_STATUS;
+        return true;
+    }
+    return false;
+}
+
 static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel) return false;
     Frame_t frame;
@@ -52,22 +88,33 @@ static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
 
     if (g_hubKnown) {
         bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
-        Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
-        Serial.print(line);
-        Serial.printf("' -> hub %s\n", ok ? "ok" : "fail");
+        if (g_monitorMode == MONITOR_BRIDGE) {
+            Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
+            Serial.print(line);
+            Serial.printf("' -> hub %s\n", ok ? "ok" : "fail");
+        }
     } else {
-        Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
-        Serial.print(line);
-        Serial.println("' – hub unknown, dropped");
+        if (g_monitorMode == MONITOR_BRIDGE || g_monitorMode == MONITOR_STATUS) {
+            Serial.printf("[SAT%d] %s telem '", SAT_ID, srcLabel);
+            Serial.print(line);
+            Serial.println("' – hub unknown, dropped");
+        }
     }
     if (g_peerKnown) {
         EspNowBridge::instance().send(g_peerMac, &frame);
+        if (g_monitorMode == MONITOR_BRIDGE) {
+            Serial.printf("[SAT%d] %s telem -> peer forwarded\n", SAT_ID, srcLabel);
+        }
     }
     return true;
 }
 
 static void handleSerialCmd(const char *cmd) {
-    if (strncasecmp(cmd, "mac", 3) == 0 || strncasecmp(cmd, "info", 4) == 0) {
+    MonitorMode newMode;
+    if (tryParseMonitorMode(cmd, &newMode)) {
+        g_monitorMode = newMode;
+        Serial.printf("[SAT%d] Monitor mode switched to: %s\n", SAT_ID, monitorModeName(g_monitorMode));
+    } else if (strncasecmp(cmd, "mac", 3) == 0 || strncasecmp(cmd, "info", 4) == 0) {
         Serial.printf("[SAT%d] Own MAC : %s\n", SAT_ID, WiFi.macAddress().c_str());
         Serial.printf("[SAT%d] Channel : %u\n", SAT_ID, g_channel);
         if (g_hubKnown) {
@@ -110,8 +157,38 @@ static void handleSerialCmd(const char *cmd) {
         prefs.end();
         Serial.printf("[SAT%d] Stored MACs cleared\n", SAT_ID);
     } else if (strncasecmp(cmd, "help", 4) == 0) {
-        Serial.printf("[SAT%d] USB commands: mac | info | debug | clearmac | help\n", SAT_ID);
+        Serial.printf("[SAT%d] USB commands: mac | info | debug | clearmac | Modi+Web | Modi+Bridge | Modi+Status | help\n", SAT_ID);
+        Serial.printf("[SAT%d] Current monitor mode: %s\n", SAT_ID, monitorModeName(g_monitorMode));
         Serial.printf("[SAT%d] USB telemetry inject: DBG%d:<name>=<value>\n", SAT_ID, SAT_ID);
+    } else if (g_monitorMode == MONITOR_WEB) {
+        if (!forwardTelemetryLine(cmd, "USB")) {
+            char dbgLine[UART_RX_BUF_SIZE];
+            char nameBuf[16];
+            size_t i = 0;
+            for (size_t j = 0; cmd[j] != '\0' && i < (sizeof(nameBuf) - 1); ++j) {
+                char ch = cmd[j];
+                if ((ch >= '0' && ch <= '9') ||
+                    (ch >= 'A' && ch <= 'Z') ||
+                    (ch >= 'a' && ch <= 'z') ||
+                    ch == '_') {
+                    nameBuf[i++] = ch;
+                } else if (i > 0 && nameBuf[i - 1] != '_') {
+                    nameBuf[i++] = '_';
+                }
+            }
+            if (i == 0) {
+                nameBuf[0] = 'U';
+                nameBuf[1] = 'S';
+                nameBuf[2] = 'B';
+                nameBuf[3] = '\0';
+            } else {
+                nameBuf[i] = '\0';
+            }
+            snprintf(dbgLine, sizeof(dbgLine), "DBG%d:%s=1", SAT_ID, nameBuf);
+            if (!forwardTelemetryLine(dbgLine, "USB")) {
+                Serial.printf("[SAT%d] USB input could not be forwarded as debug telemetry\n", SAT_ID);
+            }
+        }
     } else if (forwardTelemetryLine(cmd, "USB")) {
         // accepted and forwarded as telemetry input, as if it came from hardware UART
     } else {
@@ -176,7 +253,9 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             g_lastHubHeartbeat = millis();
             g_hubOnline = true;
             if (!wasOnline) {
-                Serial.printf("[SAT%d] Hub back online\n", SAT_ID);
+                if (g_monitorMode == MONITOR_STATUS) {
+                    Serial.printf("[SAT%d] Hub back online\n", SAT_ID);
+                }
             }
             if (!g_hubKnown) {
                 memcpy(g_hubMac, mac, 6);
@@ -202,9 +281,13 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         int n = parser.hubFrameToUart(frame, uartBuf, sizeof(uartBuf));
         if (n > 0) {
             TeensySerial.print(uartBuf);
-            // Mirror UART output to USB with "UART:" prefix for monitoring
-            Serial.print("UART: ");
-            Serial.print(uartBuf);
+            if (g_monitorMode == MONITOR_WEB) {
+                // In Web mode print exactly what is sent to UART
+                Serial.print(uartBuf);
+            } else if (g_monitorMode == MONITOR_BRIDGE) {
+                Serial.print("UART: ");
+                Serial.print(uartBuf);
+            }
         } else {
             Serial.printf("[SAT%d] cmd type=0x%02X seq=%u – UART encode failed\n",
                           SAT_ID, frame->msg_type, frame->seq);
@@ -216,15 +299,19 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             ack.status   = ACK_OK;
             ack.msg_type = frame->msg_type;
             bool ok = sendFrame(g_hubMac, MSG_ACK, (const uint8_t *)&ack, sizeof(ack));
-            Serial.printf("[SAT%d] ACK seq=%u sent=%s\n", SAT_ID, frame->seq, ok ? "ok" : "fail");
+            if (g_monitorMode == MONITOR_BRIDGE) {
+                Serial.printf("[SAT%d] ACK seq=%u sent=%s\n", SAT_ID, frame->seq, ok ? "ok" : "fail");
+            }
         }
         break;
     }
 
     case MSG_ACK: {
         const AckPayload_t *ack = reinterpret_cast<const AckPayload_t *>(frame->payload);
-        Serial.printf("[SAT%d] ACK received ack_seq=%u status=0x%02X\n",
-                      SAT_ID, ack->ack_seq, ack->status);
+        if (g_monitorMode == MONITOR_BRIDGE) {
+            Serial.printf("[SAT%d] ACK received ack_seq=%u status=0x%02X\n",
+                          SAT_ID, ack->ack_seq, ack->status);
+        }
         ackMgr.onAck(ack->ack_seq);
         break;
     }
@@ -233,6 +320,9 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         // Telemetry from peer satellite – forward to hub if available
         if (g_hubKnown) {
             EspNowBridge::instance().send(g_hubMac, frame);
+            if (g_monitorMode == MONITOR_BRIDGE) {
+                Serial.printf("[SAT%d] Peer DBG frame forwarded to hub\n", SAT_ID);
+            }
         }
         break;
 
@@ -300,6 +390,7 @@ void setup() {
     Serial.printf("[SAT%d] Ready – MAC: %s  ch=%u\n",
                   SAT_ID, WiFi.macAddress().c_str(), g_channel);
     Serial.printf("[SAT%d] Type 'help' for USB commands\n", SAT_ID);
+    Serial.printf("[SAT%d] Monitor mode default: %s\n", SAT_ID, monitorModeName(g_monitorMode));
 }
 
 // ─── Loop ─────────────────────────────────────────────────────
@@ -315,6 +406,10 @@ void loop() {
         if (c == '\n' || c == '\r') {
             if (uartIdx > 0) {
                 uartLine[uartIdx] = '\0';
+                if (g_monitorMode == MONITOR_WEB) {
+                    // In Web mode print exactly what arrives on UART
+                    Serial.println(uartLine);
+                }
                 forwardTelemetryLine(uartLine, "UART");
                 uartIdx = 0;
             }
@@ -337,7 +432,9 @@ void loop() {
     if (g_hubOnline && g_hubKnown &&
         (now - g_lastHubHeartbeat) > HEARTBEAT_TIMEOUT_MS) {
         g_hubOnline = false;
-        Serial.printf("[SAT%d] Hub offline – P2P bridge still active\n", SAT_ID);
+        if (g_monitorMode == MONITOR_STATUS) {
+            Serial.printf("[SAT%d] Hub offline – P2P bridge still active\n", SAT_ID);
+        }
     }
 
     // ── ACK retry tick ────────────────────────────────────────
@@ -361,7 +458,7 @@ void loop() {
 
     // ── Periodic debug output via USB ─────────────────────────
     static uint32_t s_lastDbgPrint = 0;
-    if ((now - s_lastDbgPrint) >= 10000) {
+    if (g_monitorMode == MONITOR_STATUS && (now - s_lastDbgPrint) >= 10000) {
         s_lastDbgPrint = now;
         Serial.printf("[SAT%d] uptime=%lums mac=%s ch=%u hub=%s peer=%s\n",
                       SAT_ID, (unsigned long)now,
