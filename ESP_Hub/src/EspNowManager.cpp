@@ -17,6 +17,11 @@ bool EspNowManager::begin(uint8_t channel, const char *pmk16) {
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(AP_SSID, AP_PASSWORD, channel);
 
+    // Start DNS server so the hub is reachable as http://esp.hub
+    if (!_dns.start(53, DNS_HOSTNAME, WiFi.softAPIP())) {
+        Serial.println("[DNS] failed to start DNS server on port 53");
+    }
+
     if (esp_now_init() != ESP_OK) {
         Serial.println("[ESPNOW] init failed");
         return false;

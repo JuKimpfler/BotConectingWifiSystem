@@ -13,6 +13,7 @@
 #define DEFAULT_CHANNEL      6
 #define AP_SSID              "ESP-Hub"
 #define AP_PASSWORD          "hub12345"
+#define DNS_HOSTNAME         "esp.hub"
 
 // ── Config file in LittleFS ───────────────────────────────────
 #define CONFIG_FILE          "/config.json"
