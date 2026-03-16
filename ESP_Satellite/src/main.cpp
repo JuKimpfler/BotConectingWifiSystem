@@ -14,6 +14,10 @@
 #include "CommandParser.h"
 
 // ─── MAC addresses (loaded from NVS or set via Serial config) ─
+// NOTE: g_hubMac / g_peerMac are written from the ESP-NOW callback (WiFi task)
+// and read from the Arduino loop task.  Writes happen exactly once (discovery),
+// before the corresponding _Known flag is set, so the ordering is safe on the
+// single-core ESP32-C3.
 static uint8_t g_hubMac[6]  = {0};
 static uint8_t g_peerMac[6] = {0};  // The other satellite
 static uint8_t g_channel    = DEFAULT_CHANNEL;
@@ -123,6 +127,7 @@ static bool sendFrame(const uint8_t *mac, uint8_t msgType,
     frame.flags    = flags;
     frame.len      = payLen;
     if (payLen > 0 && payload) {
+        if (payLen > FRAME_MAX_PAYLOAD) return false;  // bounds check
         memcpy(frame.payload, payload, payLen);
     }
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + payLen);

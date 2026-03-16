@@ -105,6 +105,10 @@ int main() {
     ok = p.uartLineToFrame("RAW:blah", 1, &tFrame);
     CHECK(!ok, "uartLineToFrame rejects wrong prefix");
 
+    // ── uartLineToFrame: empty name rejected ─────────────────
+    ok = p.uartLineToFrame("DBG1:=42", 1, &tFrame);
+    CHECK(!ok, "uartLineToFrame rejects empty telemetry name");
+
     printf("\nResult: %d/%d tests passed\n", g_pass, g_tests);
     return (g_pass == g_tests) ? 0 : 1;
 }

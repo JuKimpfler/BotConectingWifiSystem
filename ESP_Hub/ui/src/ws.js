@@ -22,6 +22,12 @@ export function wsConnect() {
     _reconnectTimer = null
   }
 
+  // Close stale socket so the server doesn't count it as an extra client (Bug 2)
+  if (socket) {
+    try { socket.close() } catch (_) { /* ignore */ }
+    socket = null
+  }
+
   socket = new WebSocket(WS_URL)
 
   socket.onopen = () => {
