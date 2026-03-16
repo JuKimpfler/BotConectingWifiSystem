@@ -126,11 +126,13 @@ void setup() {
 
     server.begin();
     Serial.printf("[HUB] HTTP server started, AP SSID: %s\n", AP_SSID);
-    Serial.printf("[HUB] IP: %s\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf("[HUB] IP: %s  |  URL: http://%s\n",
+                  WiFi.softAPIP().toString().c_str(), DNS_HOSTNAME);
 }
 
 // ─── Loop ─────────────────────────────────────────────────────
 void loop() {
+    EspNowManager::instance().processDns();
     ws.cleanupClients(2);
     router.tick();
     heartbeat.tick(peers, EspNowManager::instance());

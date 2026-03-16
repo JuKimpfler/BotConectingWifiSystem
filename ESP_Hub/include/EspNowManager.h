@@ -5,6 +5,7 @@
 // ============================================================
 
 #include <Arduino.h>
+#include <DNSServer.h>
 #include <esp_now.h>
 #include <WiFi.h>
 #include "messages.h"
@@ -22,6 +23,9 @@ public:
 
     void setRecvCallback(FrameRecvCb cb) { _recvCb = cb; }
 
+    /** Call from loop() to process pending DNS requests. */
+    void processDns() { _dns.processNextRequest(); }
+
     static EspNowManager &instance();
 
 private:
@@ -31,4 +35,5 @@ private:
 
     FrameRecvCb _recvCb = nullptr;
     uint8_t     _channel = DEFAULT_CHANNEL;
+    DNSServer   _dns;
 };
