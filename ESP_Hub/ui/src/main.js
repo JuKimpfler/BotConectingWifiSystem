@@ -414,8 +414,8 @@ document.getElementById('btn-save-cfg').addEventListener('click', () => {
 })
 
 // Clear ACK timeout when a settings ACK arrives
-wsOn('ack', () => {
-  if (_settingsAckTimer) {
+wsOn('ack', (msg) => {
+  if (_settingsAckTimer && msg.msg_type === 9) {
     clearTimeout(_settingsAckTimer)
     _settingsAckTimer = null
   }
