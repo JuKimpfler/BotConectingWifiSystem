@@ -162,6 +162,11 @@ static void handleSerialCmd(const char *cmd) {
         Serial.printf("[SAT%d] USB commands: mac | info | debug | clearmac | Modi+Web | Modi+Bridge | Modi+Status | help\n", SAT_ID);
         Serial.printf("[SAT%d] Current monitor mode: %s\n", SAT_ID, monitorModeName(g_monitorMode));
         Serial.printf("[SAT%d] USB telemetry inject: DBG%d:<name>=<value>\n", SAT_ID, SAT_ID);
+#ifdef UART_BRIDGE_USB
+        Serial.printf("[SAT%d] *** UART_BRIDGE_USB active – HW UART disabled ***\n", SAT_ID);
+        Serial.printf("[SAT%d]   TX (hub->Teensy): printed here with [TX->USB] prefix\n", SAT_ID);
+        Serial.printf("[SAT%d]   RX (Teensy->hub): type DBG%d:<name>=<value> above\n", SAT_ID, SAT_ID);
+#endif
     } else if (g_monitorMode == MONITOR_WEB) {
         if (!forwardTelemetryLine(cmd, "USB")) {
             char dbgLine[UART_RX_BUF_SIZE];
@@ -279,10 +284,14 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     case MSG_CTRL:
     case MSG_MODE:
     case MSG_CAL: {
-        // Forward to Teensy via UART
+        // Forward to Teensy via UART (or USB when UART_BRIDGE_USB is active)
         char uartBuf[128];
         int n = parser.hubFrameToUart(frame, uartBuf, sizeof(uartBuf));
         if (n > 0) {
+#ifdef UART_BRIDGE_USB
+            // UART bridge mode: redirect HW UART output to USB Serial
+            Serial.printf("[SAT%d][TX->USB] %s", SAT_ID, uartBuf);
+#else
             TeensySerial.print(uartBuf);
             if (g_monitorMode == MONITOR_WEB) {
                 // In Web mode print exactly what is sent to UART
@@ -291,6 +300,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
                 Serial.print("UART: ");
                 Serial.print(uartBuf);
             }
+#endif
         } else {
             Serial.printf("[SAT%d] cmd type=0x%02X seq=%u – UART encode failed\n",
                           SAT_ID, frame->msg_type, frame->seq);
@@ -378,7 +388,13 @@ void setup() {
 
     loadConfig();
 
+#ifdef UART_BRIDGE_USB
+    Serial.printf("[SAT%d] *** UART_BRIDGE_USB active – HW UART pins disabled ***\n", SAT_ID);
+    Serial.printf("[SAT%d]   Commands to Teensy are printed here with [TX->USB] prefix.\n", SAT_ID);
+    Serial.printf("[SAT%d]   Simulate Teensy UART input by typing: DBG%d:<name>=<value>\n", SAT_ID, SAT_ID);
+#else
     TeensySerial.begin(HW_UART_BAUD, SERIAL_8N1, HW_UART_RX_PIN, HW_UART_TX_PIN);
+#endif
 
     EspNowBridge &bridge = EspNowBridge::instance();
     bridge.begin(g_channel);
@@ -401,6 +417,7 @@ void loop() {
     uint32_t now = millis();
 
     // ── Read from Teensy UART ──────────────────────────────────
+#ifndef UART_BRIDGE_USB
     static char uartLine[UART_RX_BUF_SIZE];
     static int  uartIdx = 0;
 
@@ -420,6 +437,9 @@ void loop() {
             uartLine[uartIdx++] = c;
         }
     }
+#endif  // !UART_BRIDGE_USB
+    // When UART_BRIDGE_USB is defined, Teensy telemetry input is handled via
+    // the USB serial command handler below (type DBG<ID>:<name>=<value>).
 
     // ── Heartbeat to hub ──────────────────────────────────────
     if (g_hubKnown && (now - g_lastHbSent) >= HEARTBEAT_INTERVAL_MS) {
