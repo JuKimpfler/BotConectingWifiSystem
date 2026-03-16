@@ -13,8 +13,15 @@ const RECONNECT_DELAY = 3000
 let socket = null
 let listeners = {}
 let connected = false
+let _reconnectTimer = null
 
 export function wsConnect() {
+  // Cancel any pending reconnect timer before creating a new connection
+  if (_reconnectTimer !== null) {
+    clearTimeout(_reconnectTimer)
+    _reconnectTimer = null
+  }
+
   socket = new WebSocket(WS_URL)
 
   socket.onopen = () => {
@@ -27,7 +34,7 @@ export function wsConnect() {
   socket.onclose = () => {
     connected = false
     _emit('ws_close')
-    setTimeout(wsConnect, RECONNECT_DELAY)
+    _reconnectTimer = setTimeout(wsConnect, RECONNECT_DELAY)
   }
 
   socket.onerror = (e) => {

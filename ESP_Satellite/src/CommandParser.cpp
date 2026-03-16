@@ -106,6 +106,9 @@ void CommandParser::_buildCalCmd(const CalPayload_t *cal, char *buf, int max) {
     const char *names[] = {"", "IR_MAX", "IR_MIN", "LINE_MAX", "LINE_MIN", "BNO"};
     int idx = cal->cal_cmd;
     // Validate against defined CAL_* range (CAL_IR_MAX=1 .. CAL_BNO=5)
-    if (idx < CAL_IR_MAX || idx > CAL_BNO) idx = 0;
+    if (idx < CAL_IR_MAX || idx > CAL_BNO) {
+        buf[0] = '\0';
+        return;
+    }
     snprintf(buf, max, "CAL_%s\n", names[idx]);
 }

@@ -174,9 +174,10 @@ void ConfigStore::hexToBytes(const char *hex, uint8_t *out, int len) {
     }
 }
 
-void ConfigStore::bytesToHex(const uint8_t *in, int len, char *out) {
+void ConfigStore::bytesToHex(const uint8_t *in, int len, char *out, size_t outLen) {
+    if (!in || !out || len <= 0 || outLen < (size_t)(len * 2 + 1)) return;
     for (int i = 0; i < len; i++) {
-        sprintf(out + i * 2, "%02X", in[i]);
+        snprintf(out + i * 2, outLen - (size_t)(i * 2), "%02X", in[i]);
     }
     out[len * 2] = '\0';
 }

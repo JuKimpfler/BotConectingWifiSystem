@@ -55,6 +55,9 @@ wsOn('ws_close', () => {
   wsBadge.className = 'badge offline'
   sat1Badge.className = 'badge offline'
   sat2Badge.className = 'badge offline'
+  // Clear stale telemetry so the table shows fresh data after reconnect
+  streams.clear()
+  telemBody.innerHTML = ''
 })
 
 // ── Peer status ────────────────────────────────────────────────
