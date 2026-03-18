@@ -5,6 +5,7 @@
 // ============================================================
 
 #include <Arduino.h>
+#include <ctype.h>
 #include <Preferences.h>
 #include "sat_config.h"
 #include "messages.h"
@@ -71,19 +72,29 @@ static const char *monitorModeName(MonitorMode mode) {
     }
 }
 
+static bool equalsIgnoreCase(const char *a, const char *b) {
+    if (!a || !b) return false;
+    while (*a != '\0' && *b != '\0') {
+        if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return false;
+        ++a;
+        ++b;
+    }
+    return (*a == '\0' && *b == '\0');
+}
+
 static bool tryParseMonitorMode(const char *cmd, MonitorMode *outMode) {
     if (!cmd || !outMode) return false;
     if (strncasecmp(cmd, "modi+", 5) != 0) return false;
     const char *modeStr = cmd + 5;
-    if (strncasecmp(modeStr, "web", 3) == 0) {
+    if (equalsIgnoreCase(modeStr, "web")) {
         *outMode = MONITOR_WEB;
         return true;
     }
-    if (strncasecmp(modeStr, "bridge", 6) == 0) {
+    if (equalsIgnoreCase(modeStr, "bridge")) {
         *outMode = MONITOR_BRIDGE;
         return true;
     }
-    if (strncasecmp(modeStr, "status", 6) == 0) {
+    if (equalsIgnoreCase(modeStr, "status")) {
         *outMode = MONITOR_STATUS;
         return true;
     }
@@ -154,7 +165,7 @@ static void handleSerialCmd(const char *cmd) {
     if (tryParseMonitorMode(cmd, &newMode)) {
         g_monitorMode = newMode;
         USB_DEBUG_PRINTF("[SAT%d] Monitor mode switched to: %s\n", SAT_ID, monitorModeName(g_monitorMode));
-    } else if (strncasecmp(cmd, "mac", 3) == 0 || strncasecmp(cmd, "info", 4) == 0) {
+    } else if (equalsIgnoreCase(cmd, "mac") || equalsIgnoreCase(cmd, "info")) {
         USB_DEBUG_PRINTF("[SAT%d] Own MAC : %s\n", SAT_ID, WiFi.macAddress().c_str());
         USB_DEBUG_PRINTF("[SAT%d] Channel : %u\n", SAT_ID, g_channel);
         if (g_hubKnown) {
@@ -174,7 +185,7 @@ static void handleSerialCmd(const char *cmd) {
             USB_DEBUG_PRINTF("[SAT%d] Peer MAC: unknown\n", SAT_ID);
         }
         USB_DEBUG_PRINTF("[SAT%d] Hub online: %s\n", SAT_ID, g_hubOnline ? "yes" : "no");
-    } else if (strncasecmp(cmd, "debug", 5) == 0) {
+    } else if (equalsIgnoreCase(cmd, "debug")) {
         USB_DEBUG_PRINTF("[SAT%d] === Debug Status ===\n", SAT_ID);
         USB_DEBUG_PRINTF("[SAT%d] Uptime    : %lu ms\n", SAT_ID, (unsigned long)millis());
         USB_DEBUG_PRINTF("[SAT%d] Own MAC   : %s\n", SAT_ID, WiFi.macAddress().c_str());
@@ -185,7 +196,7 @@ static void handleSerialCmd(const char *cmd) {
         USB_DEBUG_PRINTF("[SAT%d] Peer      : %s\n", SAT_ID,
                       g_peerKnown ? "known"   : "unknown");
         USB_DEBUG_PRINTF("[SAT%d] ACK queue : %u pending\n", SAT_ID, ackMgr.pendingCount());
-    } else if (strncasecmp(cmd, "clearmac", 8) == 0) {
+    } else if (equalsIgnoreCase(cmd, "clearmac")) {
         g_hubKnown  = false;
         g_peerKnown = false;
         memset(g_hubMac,  0, 6);
@@ -196,7 +207,7 @@ static void handleSerialCmd(const char *cmd) {
         prefs.remove(NVS_KEY_PEER_MAC);
         prefs.end();
         USB_DEBUG_PRINTF("[SAT%d] Stored MACs cleared\n", SAT_ID);
-    } else if (strncasecmp(cmd, "help", 4) == 0) {
+    } else if (equalsIgnoreCase(cmd, "help")) {
         USB_DEBUG_PRINTF("[SAT%d] USB commands: mac | info | debug | clearmac | Modi+Web | Modi+Bridge | Modi+Status | help\n", SAT_ID);
         USB_DEBUG_PRINTF("[SAT%d] Current monitor mode: %s\n", SAT_ID, monitorModeName(g_monitorMode));
         USB_DEBUG_PRINTF("[SAT%d] USB telemetry inject: DBG:<name>=<value>\n", SAT_ID);
