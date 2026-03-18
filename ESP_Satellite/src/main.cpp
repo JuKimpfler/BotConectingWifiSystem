@@ -141,7 +141,7 @@ static bool forwardUartRawToPeer(const char *line) {
     return ok;
 }
 
-static bool routeUsbOrUartLine(const char *line, const char *srcLabel) {
+static bool routePayloadLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel || line[0] == '\0') return false;
     if (strncmp(line, DBG_PREFIX, strlen(DBG_PREFIX)) == 0) {
         return forwardTelemetryLine(line, srcLabel);
@@ -204,7 +204,7 @@ static void handleSerialCmd(const char *cmd) {
         USB_DEBUG_PRINTF("[SAT%d] *** UART_BRIDGE_USB active – HW UART disabled ***\n", SAT_ID);
         USB_DEBUG_PRINTF("[SAT%d]   UART payload traffic is routed via USB only\n", SAT_ID);
 #endif
-    } else if (routeUsbOrUartLine(cmd, "USB")) {
+    } else if (routePayloadLine(cmd, "USB")) {
         // accepted and forwarded with the same routing as hardware UART input
     } else {
         USB_DEBUG_PRINTF("[SAT%d] Unknown command '%s'. Type 'help'.\n", SAT_ID, cmd);
@@ -449,12 +449,14 @@ void loop() {
         if (c == '\n' || c == '\r') {
             if (uartIdx > 0) {
                 uartLine[uartIdx] = '\0';
-                // Standard mode: show UART RX traffic on USB monitor as well
-                Serial.println(uartLine);
                 // Route based on prefix:
                 // "DBG:" prefix → telemetry/debug to hub
                 // no prefix    → transparent P2P bridge to peer satellite
-                routeUsbOrUartLine(uartLine, "UART");
+                bool routed = routePayloadLine(uartLine, "UART");
+                if (routed) {
+                    // Standard mode: show relevant UART RX payload traffic on USB monitor as well
+                    Serial.println(uartLine);
+                }
                 uartIdx = 0;
             }
         } else if (uartIdx < (int)(sizeof(uartLine) - 1)) {
