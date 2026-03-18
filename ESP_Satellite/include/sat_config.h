@@ -44,17 +44,13 @@
 #define NVS_KEY_PEER_MAC     "peer_mac"
 #define NVS_KEY_CHANNEL      "channel"
 
-// ── UART Bridge to USB ────────────────────────────────────────
-// When UART_BRIDGE_USB is defined, all hardware UART communication
-// with the Teensy (TX and RX) is redirected through USB Serial.
-// This allows testing the full data path without a connected Teensy:
-//   • Commands from the hub that would be sent to the Teensy via HW UART
-//     are instead printed to USB Serial with a [TX->USB] prefix.
-//   • Telemetry input that normally arrives from the Teensy via HW UART
-//     is instead entered through USB Serial using the existing USB command
-//     handler (type "DBG:<name>=<value>").
+// ── UART Bridge to USB (USB-only mode) ────────────────────────
+// When UART_BRIDGE_USB is defined:
+//   • HW UART TX/RX is disabled.
+//   • All UART payload traffic is routed via USB Serial instead.
+//   • USB debug output is suppressed.
 // Without this flag, HW UART communicates normally with the Teensy and
-// USB Serial continues to output debug/monitor data as usual.
+// USB Serial mirrors UART payload traffic plus lightweight debug output.
 // Enable by adding -DUART_BRIDGE_USB to build_flags in platformio.ini,
 // or by using the esp_sat1_usb_bridge / esp_sat2_usb_bridge environments.
 // #define UART_BRIDGE_USB
