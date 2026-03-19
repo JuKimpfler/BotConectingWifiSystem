@@ -173,6 +173,12 @@ void EspNowBridge::_onRecv(const uint8_t *mac,
     if (f->magic != FRAME_MAGIC) return;
     if (f->len > FRAME_MAX_PAYLOAD) return;
 
+    // Validate that the received length matches the claimed payload length
+    if (len < (int)(FRAME_HEADER_SIZE + f->len + 2)) {
+        Serial.println("[BRIDGE] Length mismatch - frame truncated");
+        return;
+    }
+
     uint16_t calcCrc = crc16_buf(data, FRAME_HEADER_SIZE + f->len);
     uint16_t rxCrc;
     memcpy(&rxCrc, data + FRAME_HEADER_SIZE + f->len, 2);
