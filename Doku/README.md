@@ -1,339 +1,352 @@
-# BotConnectingWifiSystem – Documentation
+# BotConnectingWifiSystem – Complete Documentation
 
-Weitere Dokumente:
-- [USB_PROTOCOL.md](./USB_PROTOCOL.md) – USB-Befehle und USB-Telemetrie-Weiterleitung am Satellite
+Welcome to the comprehensive documentation for the BotConnectingWifiSystem. This system enables wireless control of two competing robots through a 3-node ESP-NOW mesh network.
 
-## Overview
+## 📖 Documentation Structure
 
-A 3-node ESP-NOW mesh consisting of:
+### Quick Start
 
-| Node | Role | Description |
-|------|------|-------------|
-| ESP #1 | SAT1 | Satellite – UART bridge to Teensy #1, P2P bridge to SAT2 |
-| ESP #2 | SAT2 | Satellite – UART bridge to Teensy #2, P2P bridge to SAT1 |
-| ESP #3 | HUB  | Hub – hosts WebSocket UI, routes commands to SAT1/SAT2 |
+- **[../README.md](../README.md)** – Quick start guide and basic setup
 
-All devices are **Seeed Studio XIAO ESP32-C3**.
+### Detailed Guides
+
+#### Setup & Installation
+- **[Setup.md](Setup.md)** – Complete step-by-step setup instructions
+  - Prerequisites (hardware & software)
+  - Building and flashing firmware
+  - Installing Teensy library
+  - First boot and pairing
+  - Verification and troubleshooting
+
+#### Hardware
+- **[Hardware.md](Hardware.md)** – Hardware documentation with diagrams
+  - Component specifications (ESP32-C3, Teensy 4.0)
+  - Wiring diagrams and pin assignments
+  - Power requirements and options
+  - Physical assembly guide
+  - Troubleshooting hardware issues
+
+#### Software Architecture
+- **[Software.md](Software.md)** – Software architecture and protocol
+  - System architecture overview
+  - Folder structure
+  - Message protocol specification
+  - Hub and satellite software components
+  - Configuration system
+  - Unit tests
+  - Development guide
+
+#### Communication
+- **[Bridge.md](Bridge.md)** – P2P bridge documentation
+  - P2P ESP-NOW bridge between satellites
+  - Message routing logic
+  - Transparent UART bridge
+  - Performance characteristics (~7ms latency)
+  - Implementation details
+  - Advanced use cases
+
+#### Web Interface
+- **[Webserver.md](Webserver.md)** – Web UI documentation
+  - Accessing the web interface
+  - UI architecture and layout
+  - Debug tab (telemetry and logs)
+  - Manual control tab (D-pad, sliders, buttons)
+  - Modes tab (autonomous behaviors)
+  - Calibrate tab (sensor calibration)
+  - Settings tab (configuration and pairing)
+  - WebSocket protocol
+  - Development guide
+
+#### Teensy Integration
+- **[Teensy.md](Teensy.md)** – BotConnect library reference
+  - Library installation
+  - Quick start guide
+  - Complete API reference
+  - Command callbacks (control, mode, calibrate)
+  - Telemetry functions
+  - Examples and best practices
+  - Troubleshooting
+
+### Additional Documentation
+
+- **[USB_PROTOCOL.md](USB_PROTOCOL.md)** – USB debugging commands (German)
+  - USB service commands (mac, debug, clearmac, help)
+  - USB telemetry injection
+  - Transparent UART bridge details
+  - Routing overview
+
+- **[../BugFixes.txt](../BugFixes.txt)** – Bug fixes and improvements (German)
+  - Fixed critical and high-priority bugs
+  - Test results and verification
+  - Recommendations for future improvements
 
 ---
 
-## Architecture
+## 🚀 Quick Navigation
+
+### I want to...
+
+#### ...get started quickly
+→ Start with [../README.md](../README.md) for the quick start guide
+
+#### ...set up the system from scratch
+→ Follow [Setup.md](Setup.md) for detailed installation steps
+
+#### ...understand the hardware connections
+→ See [Hardware.md](Hardware.md) for wiring diagrams and specifications
+
+#### ...learn how the system works
+→ Read [Software.md](Software.md) for architecture and protocol details
+
+#### ...use the web interface
+→ Check [Webserver.md](Webserver.md) for UI features and controls
+
+#### ...program my Teensy board
+→ Refer to [Teensy.md](Teensy.md) for the BotConnect library API
+
+#### ...implement robot-to-robot communication
+→ Explore [Bridge.md](Bridge.md) for P2P bridge capabilities
+
+#### ...troubleshoot problems
+→ Each guide has a dedicated troubleshooting section
+
+---
+
+## 📋 System Overview
+
+### Architecture
+
+The BotConnectingWifiSystem consists of:
+- **1 Hub (ESP32-C3 #3):** Hosts WiFi AP and web interface
+- **2 Satellites (ESP32-C3 #1, #2):** Bridge UART to Teensy, maintain P2P link
+- **2 Teensy (4.0 #1, #2):** Motor control and sensor processing
 
 ```
  [Browser]
-     |  WebSocket
- [ESP #3 – HUB]  ─ ESP-NOW ch6 ─►  [ESP #1 – SAT1]  ─ UART ─►  [Teensy #1]
-                  ◄─────────────    [ESP #1 – SAT1]  ◄─ UART ─   [Teensy #1]
-                                         │ ▲
-                                P2P fast │ │ (7 ms)
-                                         ▼ │
-                  ─ ESP-NOW ch6 ─►  [ESP #2 – SAT2]  ─ UART ─►  [Teensy #2]
-                  ◄─────────────    [ESP #2 – SAT2]  ◄─ UART ─   [Teensy #2]
+     │  WebSocket
+ [ESP #3 – HUB]  ─ ESP-NOW ──►  [ESP #1 – SAT1]  ─ UART ──►  [Teensy #1]
+                  ◄──────────    [ESP #1 – SAT1]  ◄─ UART ─   [Teensy #1]
+                                       │ ▲
+                              P2P ~7ms │ │
+                                       ▼ │
+                  ─ ESP-NOW ──►  [ESP #2 – SAT2]  ─ UART ──►  [Teensy #2]
+                  ◄──────────    [ESP #2 – SAT2]  ◄─ UART ─   [Teensy #2]
 ```
 
-### Key Design Points
+### Key Features
 
-- **P2P Bridge**: SAT1 ↔ SAT2 always active at ~7 ms cycle, even when HUB is offline.
-- **Hub Command Links**: Low-rate (~100 ms) command paths from HUB to SAT1/SAT2.
-- **Telemetry**: Teensy sends `DBG1:name=value` (or `DBG2:`) lines; satellites forward them to HUB via ESP-NOW; HUB throttles to UI at max 20 Hz.
-- **ACK**: Non-cyclic commands (MODE, CAL, PAIR, SETTINGS) use `FLAG_ACK_REQ` with up to 3 retries at 500 ms timeout.
-- **Security**: ESP-NOW PMK (global) + per-peer LTK, both configurable via UI and stored in NVS.
-- **Heartbeat**: 1 Hz bidirectional; 4 s timeout marks peer offline.
+✅ **Wireless Control:** Browser-based UI via WiFi AP
+✅ **Low Latency P2P:** 7ms direct satellite-to-satellite communication
+✅ **Real-Time Telemetry:** Live sensor data in web interface
+✅ **Multiple Control Modes:** Manual, autonomous, calibration
+✅ **Secure Communication:** ESP-NOW encryption with PMK/LTK
+✅ **Easy Integration:** Arduino library for Teensy
+✅ **Extensible:** Open protocol for custom commands
 
 ---
 
-## Folder Structure
+## 🛠️ Technology Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Microcontrollers** | ESP32-C3, Teensy 4.0 | Wireless comm & motor control |
+| **Wireless Protocol** | ESP-NOW | Low-latency mesh network |
+| **Web Frontend** | Vanilla JS + Vite | Browser-based control UI |
+| **Web Backend** | AsyncWebServer | ESP32 web server |
+| **Communication** | WebSocket, UART | Real-time bidirectional |
+| **Build Tools** | PlatformIO, npm, CMake | Firmware & UI compilation |
+| **Testing** | CTest | Unit tests for protocol |
+
+---
+
+## 📦 Repository Structure
 
 ```
 BotConnectingWifiSystem/
-├── ESP_base/            ← Original example projects (reference only)
-├── P2P_projekt/         ← Original P2P example (reference only)
+├── README.md                   ← Quick start guide
+├── BugFixes.txt                ← Bug fix documentation (German)
 │
-├── shared/              ← Protocol definitions shared across all targets
-│   ├── messages.h       ← Frame structs, message types, roles, flags
-│   ├── crc16.h          ← CRC-16/MODBUS implementation (inline)
-│   ├── config_schema.json  ← JSON schema for hub config
-│   └── config_default.json ← Factory default config
+├── Doku/                       ← Comprehensive documentation
+│   ├── README.md               ← This file (documentation index)
+│   ├── Setup.md                ← Setup guide
+│   ├── Hardware.md             ← Hardware documentation
+│   ├── Software.md             ← Software architecture
+│   ├── Bridge.md               ← P2P bridge documentation
+│   ├── Webserver.md            ← Web UI documentation
+│   ├── Teensy.md               ← Teensy library reference
+│   └── USB_PROTOCOL.md         ← USB debugging (German)
 │
-├── ESP_Hub/             ← PlatformIO project for ESP #3 (HUB)
+├── shared/                     ← Protocol definitions
+│   ├── messages.h              ← Frame structs and message types
+│   ├── crc16.h                 ← CRC-16/MODBUS implementation
+│   ├── config_schema.json      ← Configuration schema
+│   └── config_default.json     ← Default configuration
+│
+├── ESP_Hub/                    ← Hub firmware + Web UI
 │   ├── platformio.ini
-│   ├── include/         ← Hub-specific headers
-│   │   ├── hub_config.h
-│   │   ├── EspNowManager.h
-│   │   ├── PeerRegistry.h
-│   │   ├── ConfigStore.h
-│   │   ├── TelemetryBuffer.h
-│   │   ├── HeartbeatService.h
-│   │   └── CommandRouter.h
-│   ├── src/             ← Hub firmware source
-│   │   ├── main.cpp
-│   │   ├── EspNowManager.cpp
-│   │   ├── PeerRegistry.cpp
-│   │   ├── ConfigStore.cpp
-│   │   ├── TelemetryBuffer.cpp
-│   │   ├── HeartbeatService.cpp
-│   │   └── CommandRouter.cpp
-│   ├── data/            ← LittleFS image (built by Vite)
-│   └── ui/              ← Vite Web UI source
+│   ├── include/                ← Hub headers
+│   ├── src/                    ← Hub implementation
+│   └── ui/                     ← Vite Web UI
 │       ├── index.html
 │       ├── package.json
-│       ├── vite.config.js
 │       └── src/
-│           ├── main.js
-│           ├── ws.js
-│           └── style.css
 │
-├── ESP_Satellite/       ← PlatformIO project for ESP #1 and #2 (SAT)
+├── ESP_Satellite/              ← Satellite firmware
 │   ├── platformio.ini
-│   ├── include/
-│   │   ├── sat_config.h
-│   │   ├── EspNowBridge.h
-│   │   ├── AckManager.h
-│   │   └── CommandParser.h
-│   └── src/
-│       ├── main.cpp
-│       ├── EspNowBridge.cpp
-│       ├── AckManager.cpp
-│       └── CommandParser.cpp
+│   ├── include/                ← Satellite headers
+│   └── src/                    ← Satellite implementation
 │
-├── Teensy_lib/          ← Arduino library for Teensy 4.0
+├── Teensy_lib/                 ← BotConnect Arduino library
 │   ├── src/
 │   │   ├── BotConnect.h
 │   │   └── BotConnect.cpp
 │   └── examples/
-│       └── BasicUsage/BasicUsage.ino
+│       └── BasicUsage/
 │
-├── test/
-│   └── unit/            ← Host-side unit tests (CMake)
-│       ├── CMakeLists.txt
-│       ├── test_crc16.cpp
-│       ├── test_messages.cpp
-│       └── test_command_parser.cpp
-│
-└── Doku/
-    └── README.md        ← This file
+└── test/unit/                  ← Unit tests
+    ├── CMakeLists.txt
+    ├── test_crc16.cpp
+    ├── test_messages.cpp
+    └── test_command_parser.cpp
 ```
 
 ---
 
-## Setup Guide
+## 🔧 Development Workflow
 
-### Prerequisites
+### 1. Initial Setup
+Follow [Setup.md](Setup.md) to install tools and flash firmware.
 
-- [PlatformIO Core](https://platformio.org/install/cli) or PlatformIO IDE (VS Code extension)
-- [Node.js ≥ 18](https://nodejs.org) (for Web UI build)
-- 3× Seeed Studio XIAO ESP32-C3
+### 2. Development Cycle
+1. Make code changes in `ESP_Hub`, `ESP_Satellite`, or `Teensy_lib`
+2. Build: `pio run -e esp_hub` (or `esp_sat1`, `esp_sat2`)
+3. Flash: `pio run -e esp_hub -t upload`
+4. Test: Monitor serial output with `pio device monitor`
 
-### 1. Flash ESP_Hub firmware (ESP #3)
+### 3. UI Development
+1. Edit files in `ESP_Hub/ui/src/`
+2. Test: `npm run dev` (dev server with hot reload)
+3. Build: `npm run build`
+4. Upload: `pio run -e esp_hub -t uploadfs`
 
-Connect the Hub ESP32-C3 via USB, then run:
-
+### 4. Testing
 ```bash
-cd ESP_Hub
-pio run -e esp_hub -t upload
+cd test/unit && mkdir build && cd build
+cmake .. -DSAT_ID=1 && make && ctest
 ```
-
-This compiles and flashes the firmware.  
-The serial monitor can be started with `pio device monitor` (115200 baud).
-
-### 2. Upload the Website (LittleFS)
-
-The Web UI is a Vite application located in `ESP_Hub/ui/`.  
-It must be compiled and then uploaded as a LittleFS filesystem image to host the site on the Hub.
-
-> **The `uploadfs` command handles both steps automatically:**  
-> it builds the UI first (runs `npm install` + `npm run build` into `ESP_Hub/data/`)  
-> and then packs and flashes the LittleFS image.
-
-```bash
-cd ESP_Hub
-pio run -e esp_hub -t uploadfs
-```
-
-If you prefer to build the UI manually beforehand:
-
-```bash
-# Step A – build the UI (only needed once, or after UI source changes)
-cd ESP_Hub/ui
-npm install
-npm run build   # output goes to ESP_Hub/data/
-
-# Step B – flash the LittleFS image
-cd ..
-pio run -e esp_hub -t uploadfs
-```
-
-> **Important:** Flash the **firmware first** (`-t upload`) and then the  
-> **filesystem** (`-t uploadfs`). Flashing the firmware after the filesystem  
-> will erase the LittleFS partition.
-
-### 3. Flash ESP_Satellite
-
-Flash **SAT1** to ESP #1:
-```bash
-cd ESP_Satellite
-pio run -e esp_sat1 -t upload
-```
-
-Flash **SAT2** to ESP #2:
-```bash
-pio run -e esp_sat2 -t upload
-```
-
-### 4. Wiring (Seeed XIAO ESP32-C3)
-
-| Signal     | XIAO Pin | GPIO | Teensy Pin |
-|------------|----------|------|------------|
-| UART TX    | D6       | 21   | Serial1 RX |
-| UART RX    | D7       | 20   | Serial1 TX |
-| GND        | GND      | –    | GND        |
-
-### 5. Pairing / First Boot
-
-1. Connect to the `ESP-Hub` WiFi AP (password: `hub12345`).
-2. Open browser at `http://192.168.4.1`.
-3. Navigate to **Settings** → click **Scan for peers**.
-4. Assign names and roles to discovered devices.
-5. Click **Save Config**.
 
 ---
 
-## Message Protocol
+## 📊 Message Protocol Summary
 
 ### Frame Format
 
 ```
-Offset  Size  Field
-  0      1    magic     = 0xBE (start-of-frame)
-  1      1    msg_type  (see table below)
-  2      1    seq       (0–255, rolling)
-  3      1    src_role  (0=HUB, 1=SAT1, 2=SAT2, 0xFF=broadcast)
-  4      1    dst_role
-  5      1    flags     (bit0=ACK_REQ, bit1=IS_RESPONSE, bit2=PRIORITY)
-  6      1    len       (payload bytes, 0–180)
-  7      1    reserved  = 0
-  8..N   N    payload
-N+1..2  CRC-16/MODBUS (init=0xFFFF, poly=0xA001) over bytes 0..N
+┌────────┬──────────┬─────┬──────────┬──────────┬───────┬─────┬──────┬─────────┬────────┐
+│ Magic  │ Msg Type │ Seq │ Src Role │ Dst Role │ Flags │ Len │ Rsvd │ Payload │ CRC-16 │
+│ 0xBE   │  1 byte  │ 1 B │  1 byte  │  1 byte  │ 1 B   │ 1 B │  1 B │ 0-180 B │  2 B   │
+└────────┴──────────┴─────┴──────────┴──────────┴───────┴─────┴──────┴─────────┴────────┘
 ```
-
-Max frame size: **190 bytes** (within ESP-NOW 250 B limit).
 
 ### Message Types
 
 | Type | Value | Description | ACK? |
 |------|-------|-------------|------|
-| DBG  | 0x01  | Telemetry stream from Teensy | No |
-| CTRL | 0x02  | Control: speed, angle, buttons | No |
-| MODE | 0x03  | Mode select (1–5) | **Yes** |
-| CAL  | 0x04  | Calibration command | **Yes** |
-| PAIR | 0x05  | Pairing request/response | **Yes** |
-| HB   | 0x06  | Heartbeat (keepalive) | No |
-| ACK  | 0x07  | Acknowledgement | No |
-| ERR  | 0x08  | Error response | No |
-| SET  | 0x09  | Settings update | **Yes** |
-| DISC | 0x0A  | Discovery broadcast/announce | No |
+| DBG | 0x01 | Telemetry | No |
+| CTRL | 0x02 | Control (speed, angle, switches, buttons) | No |
+| MODE | 0x03 | Mode selection | Yes |
+| CAL | 0x04 | Calibration | Yes |
+| PAIR | 0x05 | Pairing | Yes |
+| HB | 0x06 | Heartbeat | No |
+| ACK | 0x07 | Acknowledgement | No |
+| ERR | 0x08 | Error response | No |
+| SET | 0x09 | Settings update | Yes |
+| DISC | 0x0A | Discovery | No |
 
-### Command → Teensy UART Strings
-
-| Command | UART string produced |
-|---------|---------------------|
-| Control | `V<speed>A<angle>SW<sw>BTN<btn>START<start>\n` |
-| Mode    | `M<n>\n` (n = 1..5) |
-| Cal IR_Max | `CAL_IR_MAX\n` |
-| Cal IR_Min | `CAL_IR_MIN\n` |
-| Cal Line_Max | `CAL_LINE_MAX\n` |
-| Cal Line_Min | `CAL_LINE_MIN\n` |
-| Cal BNO | `CAL_BNO\n` |
-
-### Teensy → ESP Telemetry (UART)
-
-```
-DBG1:StreamName=value\n   ← from SAT1's Teensy
-DBG2:StreamName=value\n   ← from SAT2's Teensy
-```
-
-`value` may be an integer, float, `0`/`1` for bool, or a short string.
+See [Software.md](Software.md) for complete protocol specification.
 
 ---
 
-## Web UI Tabs
+## 🎯 Use Cases
 
-| Tab | Description |
-|-----|-------------|
-| **Debug** | Telemetry table (name / current / min / max) + raw text monitor |
-| **Manual** | D-pad, Speed/Angle inputs, SW1–3 switches, B1–B4 buttons, Start toggle, target selector |
-| **Modes** | Buttons for modes 1–5 (PID / Ball Approach / Goal Rotate / Homing / Defender) |
-| **Calibrate** | IR_Max, IR_Min, Line_Max, Line_Min, BNO calibration buttons |
-| **Settings** | Scan/pair, channel, PMK, telemetry rate, save/load, factory reset |
+### Competition Robots
+- **Two competing robots** in RoboCup, VEX, or similar competitions
+- **Real-time coordination** via P2P bridge
+- **Manual override** for testing or emergency control
 
----
+### Research & Education
+- **Multi-robot systems** research
+- **Wireless communication** protocols
+- **Embedded systems** education
 
-## BotConnect Teensy Library
-
-```cpp
-#include "BotConnect.h"
-
-void setup() {
-    Serial1.begin(115200);
-    BC.begin(Serial1, 1);  // SAT_ID = 1 or 2
-    BC.onMode([](uint8_t id) { /* set mode */ });
-    BC.onControl([](int16_t spd, int16_t ang, uint8_t sw, uint8_t btn, uint8_t start) {
-        /* drive motors */
-    });
-    BC.onCalibrate([](const char *cmd) { /* run calibration */ });
-}
-
-void loop() {
-    BC.process();  // must be called every loop
-    BC.sendTelemetryFloat("BallAngle", angle);
-    BC.sendTelemetryInt("Mode", currentMode);
-}
-```
+### Prototyping
+- **Rapid prototyping** of robot behaviors
+- **Easy telemetry** visualization
+- **Web-based tuning** of control parameters
 
 ---
 
-## Troubleshooting
+## 🤝 Contributing
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| SAT badges always offline | Wrong ESP-NOW channel or MACs not paired | Re-scan in Settings; check channel=6 everywhere |
-| No telemetry data | Teensy not sending `DBG1:` / `DBG2:` lines | Check `BC.begin(Serial1, 1)` and that `process()` is called |
-| ACK timeout | Satellite offline or out of range | Check power; reduce distance; check LTK configuration |
-| UI 404 / blank page | LittleFS not flashed | Run `cd ESP_Hub && pio run -e esp_hub -t uploadfs` |
-| `uploadfs` fails – `npm` not found | Node.js not installed | Install Node.js ≥ 18 from https://nodejs.org |
-| `uploadfs` fails – `npm run build` error | UI dependencies missing or broken | Run `cd ESP_Hub/ui && npm install` then retry `uploadfs` |
-| Browser shows old/cached UI | Browser cache stale | Hard-reload (`Ctrl+Shift+R` / `Cmd+Shift+R`) |
-| Settings not saved | LittleFS mount failed | Run `pio run -e esp_hub -t erase`, then re-flash firmware, then `uploadfs` |
-| Mode button no ACK | Teensy not connected to satellite | Check UART wiring (TX/RX swap!) |
+When adding new features or fixing bugs:
+1. Update relevant documentation files
+2. Add unit tests for protocol changes
+3. Test on actual hardware
+4. Document configuration changes
 
 ---
 
-## Running Unit Tests
+## 📝 Version History
 
-```bash
-cd test/unit
-mkdir build && cd build
-cmake .. -DSAT_ID=1
-make
-ctest --output-on-failure
-```
-
-All 3 tests (test_crc16, test_messages, test_command_parser) should pass.
+- **Version 1.0 (2026-03-19)**
+  - Complete documentation restructure
+  - Added dedicated documentation files for each component
+  - Fixed all critical and high-priority bugs
+  - Improved protocol documentation
 
 ---
 
-## Configuration Schema
+## 💡 Tips for Success
 
-See `shared/config_schema.json` for the full JSON schema.  
-Default config: `shared/config_default.json`.
+1. **Read Setup.md first** – Don't skip the setup guide
+2. **Check wiring carefully** – Most issues are wiring errors (TX/RX crossed)
+3. **Use serial monitors** – Essential for debugging
+4. **Start simple** – Test basic examples before complex code
+5. **Monitor telemetry** – Watch Debug tab for real-time feedback
+6. **Check connection status** – Verify satellites are online before testing
+7. **Use calibration tools** – Proper calibration improves performance
 
-Key fields:
+---
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `channel` | 6 | ESP-NOW / WiFi channel |
-| `pmk` | "" | 32-hex-char Primary Master Key (stored in NVS) |
-| `peers[].role` | – | `"SAT1"` or `"SAT2"` |
-| `telemetry.max_rate_hz` | 20 | UI telemetry update rate |
-| `heartbeat.interval_ms` | 1000 | Heartbeat send interval |
-| `heartbeat.timeout_ms` | 4000 | Peer offline timeout |
+## 🆘 Getting Help
+
+### Troubleshooting Steps
+1. Check the troubleshooting section in the relevant guide
+2. Verify all connections and power supplies
+3. Check serial monitor output for errors
+4. Verify firmware versions match
+5. Try factory reset if configuration is corrupted
+
+### Common Issues
+- **No WiFi connection:** Check hub is powered and booted
+- **Satellites offline:** Check ESP-NOW channel and pairing
+- **No telemetry:** Verify `DBG:` prefix and UART connection
+- **Commands not working:** Check satellite online status and ACK responses
+
+---
+
+## 📄 License
+
+This project is open-source. See repository root for license details.
+
+---
+
+## 📧 Contact
+
+For questions or issues, please open an issue on the GitHub repository.
+
+---
+
+**Documentation Version:** 1.0
+**Last Updated:** 2026-03-19
+**Language:** English (with some German documents as noted)
