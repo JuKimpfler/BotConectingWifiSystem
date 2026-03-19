@@ -178,17 +178,35 @@ A full example is in [`Teensy_lib/examples/BasicUsage/BasicUsage.ino`](Teensy_li
 1. Power on all three ESP32-C3 boards.
 2. On your computer or phone, connect to the Wi-Fi network **`ESP-Hub`** (password: `hub12345`).
 3. Open a browser and navigate to **`http://192.168.4.1`**.
-4. Go to the **Settings** tab and click **Scan for peers**.
+4. Go to the **Settings** tab and click **Scan for satellites**.
 5. Assign names and roles (`SAT1` / `SAT2`) to the discovered devices.
-6. Click **Save Config**.
+6. Click **Add Peer (Long-term)** / **Use** to confirm each pairing.  The MAC address is stored permanently in LittleFS and loaded at every subsequent boot.
+7. Click **Save Config** to persist the channel and network ID.
 
-The hub will store the configuration in NVS and reconnect automatically on subsequent boots.
+### Hub-less (Standalone) Operation
+
+After the one-time pairing via the web menu:
+
+- The satellite firmware loads persisted hub and peer MACs from NVS at every boot.
+- SAT↔SAT P2P communication works **completely without the hub being present**.
+- If the hub is offline, the satellites continue sending/receiving data to/from each other.
+- The hub only re-activates the P2P link if it sends a heartbeat; it is never required for P2P data frames.
+
+### Anti-Mis-Pairing (Multiple Deployments in Range)
+
+If more than one BotConnectingWifiSystem is operating in the same ESP-NOW range (e.g., multiple robots at a competition), use the **Network ID** setting to isolate each system:
+
+1. In the **Settings** → **ESP-NOW** panel, set a unique **Network ID** (1–255) for your deployment.
+2. Set the same value as `ESPNOW_NETWORK_ID` in `ESP_Satellite/include/sat_config.h` and recompile both satellites.
+3. All frames carry the network ID in the header.  The firmware drops frames from devices with a different ID, preventing accidental cross-system pairing, crosstalk, or control interference.
+
+> Default network ID is `0x01`.  If you never need to worry about neighboring systems, you can leave it at the default.
 
 ---
 
 ## 9. Run Unit Tests
 
-The host-side unit tests verify the CRC-16, message framing, and command-parser logic without any hardware.
+The host-side unit tests verify the CRC-16, message framing, command-parser, and routing/network-ID logic without any hardware.
 
 ```bash
 cd test/unit
@@ -198,7 +216,7 @@ make
 ctest --output-on-failure
 ```
 
-Expected output: all 3 tests pass (`test_crc16`, `test_messages`, `test_command_parser`).
+Expected output: all 4 tests pass (`test_crc16`, `test_messages`, `test_command_parser`, `test_routing`).
 
 ---
 
@@ -207,6 +225,9 @@ Expected output: all 3 tests pass (`test_crc16`, `test_messages`, `test_command_
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | SAT badges always offline | Wrong ESP-NOW channel or MACs not paired | Re-scan in **Settings**; verify `channel = 6` everywhere |
+| `ESP_ERR_ESPNOW_NOT_FOUND` in logs | Peer not registered in ESP-NOW table | Re-add peer from **Long-term Paired Satellites** panel; firmware now auto-restores on TX |
+| P2P goes to `FF:FF:FF:FF:FF:FF` | Peer MAC not resolved (peer unknown) | Perform long-term pairing once via Settings → Scan; check NVS with USB `clearmac` + re-pair |
+| Crosstalk with another system | Neighboring BotConnectingWifiSystem on same network ID | Set a unique **Network ID** (1–255) in Settings and recompile satellites with matching `ESPNOW_NETWORK_ID` |
 | No telemetry data | Teensy not sending `DBG1:`/`DBG2:` lines | Check `BC.begin(Serial1, 1)` and that `BC.process()` is called every loop |
 | ACK timeout | Satellite offline or out of range | Check power and distance; verify LTK in Settings |
 | UI shows 404 / blank page | LittleFS image not flashed | Run `pio run -e esp_hub -t uploadfs` |

@@ -30,6 +30,8 @@ function _loadConfig() {
     .then(cfg => {
       if (cfg.channel != null)
         document.getElementById('cfg-channel').value = cfg.channel
+      if (cfg.network_id != null)
+        document.getElementById('cfg-network-id').value = cfg.network_id
       if (cfg.telemetry && cfg.telemetry.max_rate_hz != null)
         document.getElementById('cfg-telem-hz').value = cfg.telemetry.max_rate_hz
     })
@@ -505,13 +507,14 @@ document.querySelectorAll('.btn-cal').forEach(btn => {
 let _settingsAckTimer = null
 
 document.getElementById('btn-save-cfg').addEventListener('click', () => {
-  const channel = parseInt(document.getElementById('cfg-channel').value, 10)
-  const pmk     = document.getElementById('cfg-pmk').value.trim()
-  const hz      = parseInt(document.getElementById('cfg-telem-hz').value, 10)
+  const channel   = parseInt(document.getElementById('cfg-channel').value, 10)
+  const pmk       = document.getElementById('cfg-pmk').value.trim()
+  const hz        = parseInt(document.getElementById('cfg-telem-hz').value, 10)
+  const networkId = parseInt(document.getElementById('cfg-network-id').value, 10)
 
   if (!wsSend({
     type: 'settings',
-    data: JSON.stringify({ channel, pmk, telemetry_max_hz: hz })
+    data: JSON.stringify({ channel, pmk, telemetry_max_hz: hz, network_id: networkId })
   })) {
     settingsFeedback.textContent = 'Error: WebSocket not connected'
     settingsFeedback.className = 'feedback error'

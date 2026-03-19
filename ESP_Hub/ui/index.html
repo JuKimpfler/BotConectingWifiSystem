@@ -131,11 +131,16 @@
           <label>PMK (32 hex chars):
             <input type="text" id="cfg-pmk" maxlength="32" placeholder="leave blank to disable" />
           </label>
+          <label title="Anti-mis-pairing: must match ESPNOW_NETWORK_ID in satellite firmware">
+            Network ID (1–255):
+            <input type="number" id="cfg-network-id" value="1" min="1" max="255" />
+          </label>
         </div>
         <div class="panel">
-          <h2>Peers</h2>
+          <h2>Long-term Paired Satellites</h2>
+          <p class="hint">Peers added here are stored permanently. They reconnect automatically after reboot without needing the hub to be online.</p>
           <div id="peer-list"></div>
-          <button id="btn-scan">Scan for peers</button>
+          <button id="btn-scan">Scan for satellites</button>
           <div id="scan-results"></div>
           <div class="manual-peer">
             <h2>Manual Add</h2>
@@ -147,7 +152,7 @@
                 <option value="2">SAT 2</option>
               </select>
             </label>
-            <button id="btn-add-peer">Add Peer</button>
+            <button id="btn-add-peer">Add Peer (Long-term)</button>
           </div>
         </div>
         <div class="panel">

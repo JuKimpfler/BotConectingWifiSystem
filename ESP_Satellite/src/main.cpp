@@ -157,13 +157,14 @@ static void sendPeerDiscovery() {
     WiFi.macAddress(req.mac);
 
     Frame_t frame = {};
-    frame.magic    = FRAME_MAGIC;
-    frame.msg_type = MSG_DISCOVERY;
-    frame.seq      = g_seq++;
-    frame.src_role = req.role;
-    frame.dst_role = ROLE_BROADCAST;
-    frame.flags    = 0;
-    frame.len      = sizeof(req);
+    frame.magic      = FRAME_MAGIC;
+    frame.msg_type   = MSG_DISCOVERY;
+    frame.seq        = g_seq++;
+    frame.src_role   = req.role;
+    frame.dst_role   = ROLE_BROADCAST;
+    frame.flags      = 0;
+    frame.network_id = ESPNOW_NETWORK_ID;
+    frame.len        = sizeof(req);
     memcpy(frame.payload, &req, sizeof(req));
 
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
@@ -180,8 +181,9 @@ static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     Frame_t frame;
     if (!parser.uartLineToFrame(line, SAT_ID, &frame)) return false;
     uint8_t seq = g_seq++;
-    frame.seq = seq;
-    // Recompute CRC after assigning the final sequence number
+    frame.seq        = seq;
+    frame.network_id = ESPNOW_NETWORK_ID;
+    // Recompute CRC after assigning the final sequence number and network_id
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
     memcpy(frame.payload + frame.len, &crc, 2);
 
@@ -217,13 +219,14 @@ static bool forwardUartRawToPeer(const char *line) {
     if (len == 0 || len > FRAME_MAX_PAYLOAD) return false;
 
     Frame_t frame = {};
-    frame.magic    = FRAME_MAGIC;
-    frame.msg_type = MSG_UART_RAW;
-    frame.seq      = g_seq++;
-    frame.src_role = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
-    frame.dst_role = (SAT_ID == 1) ? ROLE_SAT2 : ROLE_SAT1;
-    frame.flags    = 0;
-    frame.len      = (uint8_t)len;
+    frame.magic      = FRAME_MAGIC;
+    frame.msg_type   = MSG_UART_RAW;
+    frame.seq        = g_seq++;
+    frame.src_role   = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    frame.dst_role   = (SAT_ID == 1) ? ROLE_SAT2 : ROLE_SAT1;
+    frame.flags      = 0;
+    frame.network_id = ESPNOW_NETWORK_ID;
+    frame.len        = (uint8_t)len;
     memcpy(frame.payload, line, len);
 
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
@@ -331,13 +334,14 @@ static bool sendFrame(const uint8_t *mac, uint8_t msgType,
                       const uint8_t *payload, uint8_t payLen,
                       uint8_t flags = 0) {
     Frame_t frame = {};
-    frame.magic    = FRAME_MAGIC;
-    frame.msg_type = msgType;
-    frame.seq      = g_seq++;
-    frame.src_role = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
-    frame.dst_role = ROLE_HUB;
-    frame.flags    = flags;
-    frame.len      = payLen;
+    frame.magic      = FRAME_MAGIC;
+    frame.msg_type   = msgType;
+    frame.seq        = g_seq++;
+    frame.src_role   = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    frame.dst_role   = ROLE_HUB;
+    frame.flags      = flags;
+    frame.network_id = ESPNOW_NETWORK_ID;
+    frame.len        = payLen;
     if (payLen > 0 && payload) {
         if (payLen > FRAME_MAX_PAYLOAD) return false;  // bounds check
         memcpy(frame.payload, payload, payLen);
@@ -470,6 +474,19 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     case MSG_DISCOVERY: {
         const DiscoveryPayload_t *disc =
             reinterpret_cast<const DiscoveryPayload_t *>(frame->payload);
+
+        // Validate system identity for discovery messages.
+        // A non-zero network_id that doesn't match ours is a foreign system.
+        uint8_t src_nid = frame->network_id;
+        if (src_nid != 0x00 && ESPNOW_NETWORK_ID != 0x00 &&
+            src_nid != (uint8_t)ESPNOW_NETWORK_ID) {
+            USB_DEBUG_PRINTF("[SAT%d] DISCOVERY rejected – foreign network_id 0x%02X "
+                             "(ours 0x%02X) from %02X:%02X:%02X:%02X:%02X:%02X\n",
+                             SAT_ID, src_nid, (uint8_t)ESPNOW_NETWORK_ID,
+                             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            break;
+        }
+
         if (disc->action == 0) {
             // If the request came from the hub, always update its MAC
             // (handles hub reboot or NVS containing a stale MAC)

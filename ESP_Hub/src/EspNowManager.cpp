@@ -4,6 +4,7 @@
 
 #include "EspNowManager.h"
 #include "crc16.h"
+#include "hub_config.h"
 #include <esp_wifi.h>
 
 EspNowManager &EspNowManager::instance() {
@@ -198,9 +199,21 @@ void EspNowManager::_onRecv(const uint8_t *mac,
         return;
     }
 
-    Serial.printf("[ESPNOW] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u\n",
+    Serial.printf("[ESPNOW] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u nid=0x%02X\n",
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                  f->msg_type, f->seq, f->src_role);
+                  f->msg_type, f->seq, f->src_role, f->network_id);
+
+    // Anti-mis-pairing: reject frames from other BotConnectingWifiSystem deployments.
+    uint8_t incoming_nid = f->network_id;
+    if (incoming_nid != 0x00 &&
+        HUB_NETWORK_ID != 0x00 &&
+        incoming_nid != (uint8_t)HUB_NETWORK_ID) {
+        Serial.printf("[ESPNOW] DROPPED – foreign network_id 0x%02X (ours 0x%02X) "
+                      "from %02X:%02X:%02X:%02X:%02X:%02X\n",
+                      incoming_nid, (uint8_t)HUB_NETWORK_ID,
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        return;
+    }
 
     EspNowManager &self = instance();
     if (self._recvCb) {

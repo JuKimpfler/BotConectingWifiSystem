@@ -316,6 +316,14 @@ button:active { opacity: 0.7; }
 
 .feedback.error { color: var(--red); }
 
+/* ── Hint text (e.g. long-term pairing description) ──────── */
+.hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 4px 0 10px;
+  line-height: 1.4;
+}
+
 /* ── Settings ────────────────────────────────────────────── */
 .btn-danger {
   border-color: var(--red);

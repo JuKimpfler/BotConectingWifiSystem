@@ -24,7 +24,11 @@ add_executable(test_command_parser
     ../../ESP_Satellite/src/CommandParser.cpp
 )
 
+# ── test_routing ──────────────────────────────────────────────
+add_executable(test_routing test_routing.cpp)
+
 enable_testing()
 add_test(NAME test_crc16          COMMAND test_crc16)
 add_test(NAME test_messages       COMMAND test_messages)
 add_test(NAME test_command_parser COMMAND test_command_parser)
+add_test(NAME test_routing        COMMAND test_routing)

@@ -17,6 +17,7 @@ struct HubConfig {
     uint32_t heartbeat_timeout_ms;
     uint16_t ui_rate_limit_ms;
     char     ui_theme[8];
+    uint8_t  network_id;   // Anti-mis-pairing system ID (0=legacy, 1-255=system-specific)
 };
 
 class ConfigStore {
