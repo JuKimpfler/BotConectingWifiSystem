@@ -16,6 +16,8 @@
   --text:       #cdd6dc;
   --text-dim:   #5a6a72;
   --text-hi:    #eaf2f5;
+  --sat1:       #40c4ff;
+  --sat2:       #ffb74d;
   --font-mono:  'Courier New', 'Lucida Console', monospace;
   --radius:     4px;
 }
@@ -155,6 +157,16 @@ tr:hover td { background: var(--border); }
   align-items: center;
 }
 
+.toolbar-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.telem-toolbar {
+  margin: 6px 0 4px 0;
+  flex-wrap: wrap;
+}
+
 /* ── Global target selector ───────────────────────────────── */
 .target-sel-global {
   display: flex;
@@ -275,6 +287,7 @@ button:active { opacity: 0.7; }
 
 .btn-target { min-width: 70px; }
 .btn-target.active { border-color: var(--blue); color: var(--blue); }
+.btn-telem-filter.active { border-color: var(--green); color: var(--green); }
 
 /* ── Mode grid ───────────────────────────────────────────── */
 .mode-grid, .cal-grid {
@@ -362,3 +375,25 @@ select {
   font-family: var(--font-mono);
   font-size: 12px;
 }
+
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-weight: bold;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.role-chip.role-1 { color: var(--sat1); border-color: var(--sat1); }
+.role-chip.role-2 { color: var(--sat2); border-color: var(--sat2); }
+
+.telem-row.role-1 td { border-left: 2px solid var(--sat1); }
+.telem-row.role-2 td { border-left: 2px solid var(--sat2); }
+
+.value-current { color: var(--green); }
+.value-dim     { color: var(--text-dim); }

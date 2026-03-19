@@ -71,7 +71,7 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
             reinterpret_cast<const TelemetryEntry_t *>(frame->payload);
         Serial.printf("[ROUTER] telemetry from role=%u: %s\n",
                       frame->src_role, entry->name);
-        _telem->ingest(entry);
+        _telem->ingest(entry, frame->src_role);
         // Confirmed data receipt – mark data path healthy
         _peers->markDataOk(mac);
         break;
@@ -185,6 +185,7 @@ void CommandRouter::_broadcastTelemetry() {
         StreamStat *s = _telem->getStream(i);
         if (!s || !s->valid) continue;
         JsonObject o = arr.add<JsonObject>();
+        o["role"]    = s->role;
         o["name"]    = s->name;
         o["current"] = s->current;
         o["min"]     = s->minVal;
