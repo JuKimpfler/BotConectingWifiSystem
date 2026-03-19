@@ -12,6 +12,11 @@ EspNowBridge &EspNowBridge::instance() {
     return instance;
 }
 
+static bool _isBroadcastMac(const uint8_t *mac) {
+    static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    return mac && memcmp(mac, kBroadcast, 6) == 0;
+}
+
 bool EspNowBridge::begin(uint8_t channel) {
     _channel = channel;
 
@@ -84,8 +89,10 @@ bool EspNowBridge::removePeer(const uint8_t *mac) {
 }
 
 bool EspNowBridge::send(const uint8_t *mac, const Frame_t *frame) {
+    bool isBroadcast = _isBroadcastMac(mac);
+
     // Ensure peer is registered before attempting send
-    if (!esp_now_is_peer_exist(mac)) {
+    if (!isBroadcast && !esp_now_is_peer_exist(mac)) {
         StoredPeer *sp = _findStoredPeer(mac);
         if (sp && sp->valid) {
             addPeer(mac, sp->encrypt, sp->encrypt ? (const char *)sp->lmk : nullptr);
