@@ -28,8 +28,14 @@ void BotConnect::process() {
                 _parseLine(_rxBuf);
                 _rxIdx = 0;
             }
-        } else if (_rxIdx < (int)(sizeof(_rxBuf) - 1)) {
-            _rxBuf[_rxIdx++] = c;
+        } else {
+            // Add character only if there's space, discard line on overflow
+            if (_rxIdx < (int)(sizeof(_rxBuf) - 1)) {
+                _rxBuf[_rxIdx++] = c;
+            } else {
+                // Buffer overflow - discard the entire line
+                _rxIdx = 0;
+            }
         }
     }
 }
@@ -82,34 +88,34 @@ void BotConnect::_parseLine(const char *line) {
 
 // ─── Telemetry send helpers ───────────────────────────────────
 // Wire format expected by CommandParser::uartLineToFrame():
-//   DBG1:name=value\n   (for SAT_ID=1)
-//   DBG2:name=value\n   (for SAT_ID=2)
+//   DBG:name=value\n   (unified prefix as of protocol v1)
+// The satellite firmware automatically tags telemetry with the correct SAT ID
 
 void BotConnect::sendTelemetryInt(const char *name, int32_t value) {
     if (!_serial) return;
     char buf[64];
-    snprintf(buf, sizeof(buf), "DBG%u:%s=%ld\n", _satId, name, (long)value);
+    snprintf(buf, sizeof(buf), "DBG:%s=%ld\n", name, (long)value);
     _sendLine(buf);
 }
 
 void BotConnect::sendTelemetryFloat(const char *name, float value) {
     if (!_serial) return;
     char buf[64];
-    snprintf(buf, sizeof(buf), "DBG%u:%s=%.4f\n", _satId, name, value);
+    snprintf(buf, sizeof(buf), "DBG:%s=%.4f\n", name, value);
     _sendLine(buf);
 }
 
 void BotConnect::sendTelemetryBool(const char *name, bool value) {
     if (!_serial) return;
     char buf[64];
-    snprintf(buf, sizeof(buf), "DBG%u:%s=%d\n", _satId, name, value ? 1 : 0);
+    snprintf(buf, sizeof(buf), "DBG:%s=%d\n", name, value ? 1 : 0);
     _sendLine(buf);
 }
 
 void BotConnect::sendTelemetryString(const char *name, const char *value) {
     if (!_serial) return;
     char buf[64];
-    snprintf(buf, sizeof(buf), "DBG%u:%s=%s\n", _satId, name, value);
+    snprintf(buf, sizeof(buf), "DBG:%s=%s\n", name, value);
     _sendLine(buf);
 }
 

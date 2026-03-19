@@ -31,6 +31,8 @@ bool PeerRegistry::remove(const uint8_t *mac) {
                 _peers[j] = _peers[j + 1];
             }
             _count--;
+            // Zero out the last entry to prevent stale data
+            memset(&_peers[_count], 0, sizeof(PeerInfo));
             return true;
         }
     }

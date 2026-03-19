@@ -484,8 +484,14 @@ void loop() {
                 }
                 uartIdx = 0;
             }
-        } else if (uartIdx < (int)(sizeof(uartLine) - 1)) {
-            uartLine[uartIdx++] = c;
+        } else {
+            // Add character only if there's space, discard line on overflow
+            if (uartIdx < (int)(sizeof(uartLine) - 1)) {
+                uartLine[uartIdx++] = c;
+            } else {
+                // Buffer overflow - discard the entire line
+                uartIdx = 0;
+            }
         }
     }
 #endif  // !UART_BRIDGE_USB
@@ -528,8 +534,14 @@ void loop() {
                 handleSerialCmd(s_serialCmdBuf);
                 s_serialCmdIdx = 0;
             }
-        } else if (s_serialCmdIdx < (int)(sizeof(s_serialCmdBuf) - 1)) {
-            s_serialCmdBuf[s_serialCmdIdx++] = c;
+        } else {
+            // Add character only if there's space, discard line on overflow
+            if (s_serialCmdIdx < (int)(sizeof(s_serialCmdBuf) - 1)) {
+                s_serialCmdBuf[s_serialCmdIdx++] = c;
+            } else {
+                // Buffer overflow - discard the entire line
+                s_serialCmdIdx = 0;
+            }
         }
     }
 

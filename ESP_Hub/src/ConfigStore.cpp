@@ -71,7 +71,21 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
         uint32_t b[6];
         if (sscanf(macStr, "%x:%x:%x:%x:%x:%x",
                    &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) == 6) {
-            for (int i = 0; i < 6; i++) info.mac[i] = (uint8_t)b[i];
+            // Validate that all bytes are in valid range (0x00-0xFF)
+            bool valid = true;
+            for (int i = 0; i < 6; i++) {
+                if (b[i] > 0xFF) {
+                    valid = false;
+                    Serial.printf("[CONFIG] Invalid MAC byte %d: 0x%x (> 0xFF)\n", i, b[i]);
+                    break;
+                }
+            }
+            if (valid) {
+                for (int i = 0; i < 6; i++) info.mac[i] = (uint8_t)b[i];
+            } else {
+                // Set to invalid MAC on error
+                memset(info.mac, 0, 6);
+            }
         }
 
         // Load LTK from NVS by MAC key
@@ -163,14 +177,23 @@ bool ConfigStore::_writeNvsSecret(const char *key, const char *val) {
 void ConfigStore::hexToBytes(const char *hex, uint8_t *out, int len) {
     if (!hex || !out || len <= 0) return;
     size_t hexLen = strlen(hex);
+
+    // Validate that hex string has exactly the expected length (2 chars per byte)
+    if (hexLen != (size_t)(len * 2)) {
+        Serial.printf("[CONFIG] Warning: hex string length mismatch (expected %d chars, got %zu)\n",
+                      len * 2, hexLen);
+        // Zero-fill the output buffer on mismatch
+        memset(out, 0, len);
+        return;
+    }
+
     for (int i = 0; i < len; i++) {
-        if ((size_t)(i * 2 + 2) > hexLen) {
-            out[i] = 0;
-            continue;
-        }
         uint32_t b = 0;
-        sscanf(hex + i * 2, "%02x", &b);
-        out[i] = (uint8_t)b;
+        if (sscanf(hex + i * 2, "%02x", &b) == 1) {
+            out[i] = (uint8_t)b;
+        } else {
+            out[i] = 0;
+        }
     }
 }
 
