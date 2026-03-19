@@ -57,7 +57,15 @@ public:
 
     // ── P2P communication ─────────────────────────────────────
     // Send a message to peer robot (via P2P bridge, no DBG: prefix)
-    void sendP2P(const char *message);
+    bool sendP2P(const char *message);
+    // Send binary-safe payload (appends newline if not present)
+    bool sendP2P(const uint8_t *data, size_t len);
+    // Check if queued P2P messages are available (FIFO, ordered)
+    bool hasP2P() const { return _p2pCount > 0; }
+    // Pop next P2P message into buffer (null-terminated)
+    bool readP2P(char *out, size_t maxLen);
+    // Pop next P2P message into Arduino String
+    bool readP2P(String &out);
 
     // ── ACK generation ────────────────────────────────────────
     // Send positive ACK for last received command (auto-called internally)
@@ -73,6 +81,11 @@ private:
 
     char    _rxBuf[512];
     int     _rxIdx = 0;
+    static const size_t P2P_MAX_MSG_LEN = 256;
+    static const uint8_t P2P_QUEUE_SIZE = 8;
+    char    _p2pQueue[P2P_QUEUE_SIZE][P2P_MAX_MSG_LEN];
+    uint8_t _p2pHead = 0;
+    uint8_t _p2pCount = 0;
 
     OnModeCb      _onMode = nullptr;
     OnCalibrateCb _onCal  = nullptr;
@@ -81,6 +94,7 @@ private:
 
     void _parseLine(const char *line);
     void _sendLine(const char *line);
+    void _enqueueP2P(const char *line);
 };
 
 // Global instance (compatible with BL.h usage pattern)
