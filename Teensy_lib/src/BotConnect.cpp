@@ -48,6 +48,10 @@ void BotConnect::process() {
 //   V200A-45SW3BTN0START1    -> control
 //   M3                        -> mode
 //   CAL_IR_MAX                -> calibrate
+//
+// P2P messages from peer robot:
+//   Any line that is not a command or DBG: prefixed line
+//   is treated as a P2P message from the peer robot
 void BotConnect::_parseLine(const char *line) {
     if (!line || line[0] == '\0') return;
 
@@ -74,6 +78,20 @@ void BotConnect::_parseLine(const char *line) {
     // Calibrate: CAL_*
     if (strncmp(line, "CAL_", 4) == 0) {
         if (_onCal) _onCal(line);  // Pass full "CAL_IR_MAX" etc.
+        return;
+    }
+
+    // ACK messages: ACK<seq>:<status>
+    // These are internal protocol messages, not dispatched to user
+    if (strncmp(line, "ACK", 3) == 0) {
+        // Internal ACK handling (future use)
+        return;
+    }
+
+    // P2P message from peer robot
+    // Any line that doesn't match the above patterns is a P2P message
+    if (_onP2P) {
+        _onP2P(line);
         return;
     }
 

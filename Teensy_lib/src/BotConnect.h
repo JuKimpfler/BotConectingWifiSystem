@@ -27,6 +27,7 @@ typedef void (*OnCalibrateCb)(const char *calCmd);
 typedef void (*OnControlCb)(int16_t speed, int16_t angle,
                             uint8_t switches, uint8_t buttons,
                             uint8_t start);
+typedef void (*OnP2PMessageCb)(const char *message);
 
 class BotConnect {
 public:
@@ -42,6 +43,7 @@ public:
     void onMode(OnModeCb cb)         { _onMode = cb; }
     void onCalibrate(OnCalibrateCb cb) { _onCal = cb; }
     void onControl(OnControlCb cb)   { _onCtrl = cb; }
+    void onP2PMessage(OnP2PMessageCb cb) { _onP2P = cb; }
 
     // ── Telemetry helpers ─────────────────────────────────────
     // Send a named integer stream value
@@ -52,6 +54,11 @@ public:
     void sendTelemetryBool(const char *name, bool value);
     // Send a named string stream value
     void sendTelemetryString(const char *name, const char *value);
+
+    // ── P2P communication helpers ─────────────────────────────
+    // Send a P2P message to the peer robot (without DBG: prefix)
+    // The message will be forwarded via ESP-NOW to the peer satellite
+    void sendP2P(const char *message);
 
     // ── ACK generation ────────────────────────────────────────
     // Send positive ACK for last received command (auto-called internally)
@@ -71,6 +78,7 @@ private:
     OnModeCb      _onMode = nullptr;
     OnCalibrateCb _onCal  = nullptr;
     OnControlCb   _onCtrl = nullptr;
+    OnP2PMessageCb _onP2P = nullptr;
 
     void _parseLine(const char *line);
     void _sendLine(const char *line);
