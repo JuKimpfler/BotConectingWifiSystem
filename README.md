@@ -215,6 +215,18 @@ Expected output: all 3 tests pass (`test_crc16`, `test_messages`, `test_command_
 
 ---
 
-## Further Reading
+## Documentation
 
-- **[Doku/README.md](Doku/README.md)** – full architecture description, message protocol reference, configuration schema, and Web UI tab overview.
+This README provides a quick start guide. For detailed information, see the comprehensive documentation:
+
+### 📚 Complete Documentation
+
+- **[Doku/README.md](Doku/README.md)** – Documentation index and overview
+- **[Doku/Setup.md](Doku/Setup.md)** – Detailed setup and installation guide
+- **[Doku/Hardware.md](Doku/Hardware.md)** – Hardware specifications, wiring diagrams, and pin assignments
+- **[Doku/Software.md](Doku/Software.md)** – Software architecture and message protocol
+- **[Doku/Bridge.md](Doku/Bridge.md)** – P2P bridge and ESP-NOW communication
+- **[Doku/Webserver.md](Doku/Webserver.md)** – Web UI features and usage guide
+- **[Doku/Teensy.md](Doku/Teensy.md)** – BotConnect library API reference
+- **[Doku/USB_PROTOCOL.md](Doku/USB_PROTOCOL.md)** – USB debugging commands (German)
+- **[BugFixes.txt](BugFixes.txt)** – Fixed bugs and improvements (German)
