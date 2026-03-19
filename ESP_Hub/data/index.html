@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ESP-NOW Hub</title>
-  <script type="module" crossorigin src="/assets/index-7_y9nc_8.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-NR8rKTta.css">
+  <script type="module" crossorigin src="/assets/index-zgvfLekU.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-GNNCA6Z9.css">
 </head>
 <body>
   <div id="app">
@@ -37,9 +37,15 @@
       <div class="panel-row">
         <div class="panel flex-2">
           <h2>Telemetry Streams</h2>
+          <div class="toolbar telem-toolbar">
+            <span class="toolbar-label">Anzeige:</span>
+            <button class="btn-target btn-telem-filter active" data-filter="1">SAT 1</button>
+            <button class="btn-target btn-telem-filter" data-filter="2">SAT 2</button>
+            <button class="btn-target btn-telem-filter" data-filter="both">Beide</button>
+          </div>
           <table id="telem-table">
             <thead>
-              <tr><th>Stream</th><th>Current</th><th>Min</th><th>Max</th></tr>
+              <tr><th>Sat</th><th>Stream</th><th>Current</th><th>Min</th><th>Max</th></tr>
             </thead>
             <tbody id="telem-body"></tbody>
           </table>

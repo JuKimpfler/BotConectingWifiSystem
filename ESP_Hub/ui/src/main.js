@@ -20,6 +20,7 @@ let joystickInterval = null
 const JOYSTICK_SEND_MS = 50
 
 // Telemetry stream map: name -> { current, min, max }
+let telemFilter = '1'
 const streams = new Map()
 
 // ── Load saved config into settings form (Bug 2) ──────────────
@@ -40,6 +41,7 @@ const wsBadge    = document.getElementById('ws-status')
 const sat1Badge  = document.getElementById('badge-sat1')
 const sat2Badge  = document.getElementById('badge-sat2')
 const telemBody  = document.getElementById('telem-body')
+const telemFilterBtns = document.querySelectorAll('.btn-telem-filter')
 const rawMonitor = document.getElementById('raw-monitor')
 const monitorPause = document.getElementById('monitor-pause')
 const modeFeedback = document.getElementById('mode-feedback')
@@ -54,6 +56,18 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
     btn.classList.add('active')
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active')
+  })
+})
+
+// ── Telemetry filter selector ───────────────────────────────
+const defaultTelemBtn = document.querySelector('.btn-telem-filter.active')
+if (defaultTelemBtn) telemFilter = defaultTelemBtn.dataset.filter || telemFilter
+telemFilterBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    telemFilterBtns.forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    telemFilter = btn.dataset.filter || 'both'
+    _renderTelemetry()
   })
 })
 
@@ -173,20 +187,41 @@ wsOn('peer_status', (msg) => {
 wsOn('telemetry', (msg) => {
   const streamsArr = msg.streams || []
   streamsArr.forEach(s => {
-    streams.set(s.name, { current: s.current, min: s.min, max: s.max })
+    if (!s.name) return
+    const role = parseInt(s.role, 10) || 0
+    const key = `${role}:${s.name}`
+    streams.set(key, {
+      name: s.name,
+      role,
+      current: s.current,
+      min: s.min,
+      max: s.max,
+    })
   })
   _renderTelemetry()
 })
 
 function _renderTelemetry() {
+  const fmt = n => (typeof n === 'number' ? n.toFixed(3) : n)
   const rows = []
-  streams.forEach((v, name) => {
-    const fmt = n => (typeof n === 'number' ? n.toFixed(3) : n)
-    rows.push(`<tr>
-      <td>${name}</td>
-      <td style="color:var(--green)">${fmt(v.current)}</td>
-      <td style="color:var(--text-dim)">${fmt(v.min)}</td>
-      <td style="color:var(--text-dim)">${fmt(v.max)}</td>
+  const selectedRole = telemFilter === 'both' ? null : parseInt(telemFilter, 10)
+  const sorted = Array.from(streams.values())
+    .filter(s => selectedRole == null || s.role === selectedRole)
+    .sort((a, b) => {
+      const ra = a.role || 99
+      const rb = b.role || 99
+      if (ra !== rb) return ra - rb
+      return a.name.localeCompare(b.name)
+    })
+
+  sorted.forEach(s => {
+    const roleLabel = s.role ? `SAT${s.role}` : 'SAT'
+    rows.push(`<tr class="telem-row role-${s.role || 0}">
+      <td class="role-chip role-${s.role || 0}">${roleLabel}</td>
+      <td>${s.name}</td>
+      <td class="value-current">${fmt(s.current)}</td>
+      <td class="value-dim">${fmt(s.min)}</td>
+      <td class="value-dim">${fmt(s.max)}</td>
     </tr>`)
   })
   telemBody.innerHTML = rows.join('')
@@ -227,9 +262,10 @@ wsOn('error', (msg) => {
 })
 
 // ── Global target selector (Bug 6) ────────────────────────────
-document.querySelectorAll('.btn-target').forEach(btn => {
+const targetButtons = document.querySelectorAll('.target-sel-global .btn-target')
+targetButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.btn-target').forEach(b => b.classList.remove('active'))
+    targetButtons.forEach(b => b.classList.remove('active'))
     btn.classList.add('active')
     targetRole = parseInt(btn.dataset.role, 10)
   })

@@ -11,8 +11,8 @@ void TelemetryBuffer::begin(uint32_t minIntervalMs) {
     _count = 0;
 }
 
-void TelemetryBuffer::ingest(const TelemetryEntry_t *entry) {
-    StreamStat *s = _getOrCreate(entry->name);
+void TelemetryBuffer::ingest(const TelemetryEntry_t *entry, uint8_t role) {
+    StreamStat *s = _getOrCreate(entry->name, role);
     if (!s) return;
 
     float val = 0.0f;
@@ -30,6 +30,7 @@ void TelemetryBuffer::ingest(const TelemetryEntry_t *entry) {
         if (val < s->minVal) s->minVal = val;
         if (val > s->maxVal) s->maxVal = val;
     }
+    s->role       = role;
     s->lastUpdate = millis();
 }
 
@@ -51,19 +52,21 @@ int TelemetryBuffer::streamCount() const {
     return _count;
 }
 
-StreamStat *TelemetryBuffer::findStream(const char *name) {
+StreamStat *TelemetryBuffer::findStream(const char *name, uint8_t role) {
     for (int i = 0; i < _count; i++) {
-        if (strncmp(_streams[i].name, name, 16) == 0) return &_streams[i];
+        if (_streams[i].role == role && strncmp(_streams[i].name, name, 16) == 0)
+            return &_streams[i];
     }
     return nullptr;
 }
 
-StreamStat *TelemetryBuffer::_getOrCreate(const char *name) {
-    StreamStat *s = findStream(name);
+StreamStat *TelemetryBuffer::_getOrCreate(const char *name, uint8_t role) {
+    StreamStat *s = findStream(name, role);
     if (s) return s;
     if (_count >= TELEM_MAX_STREAMS) return nullptr;
     s = &_streams[_count++];
     memset(s, 0, sizeof(StreamStat));
     strlcpy(s->name, name, sizeof(s->name));
+    s->role = role;
     return s;
 }
