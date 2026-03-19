@@ -260,6 +260,14 @@ void CommandRouter::_handleSettings(const char *json) {
         const char *pmk = doc["pmk"] | "";
         strlcpy(_hubCfg->pmk_hex, pmk, sizeof(_hubCfg->pmk_hex));
     }
+    if (doc.containsKey("network_id")) {
+        uint8_t nid = doc["network_id"] | _hubCfg->network_id;
+        if (nid != _hubCfg->network_id) {
+            Serial.printf("[ROUTER] network_id changed: 0x%02X -> 0x%02X\n",
+                          _hubCfg->network_id, nid);
+            _hubCfg->network_id = nid;
+        }
+    }
     if (doc.containsKey("telemetry_max_hz")) {
         _hubCfg->telemetry_max_hz = doc["telemetry_max_hz"] | _hubCfg->telemetry_max_hz;
         // Update telemetry interval at runtime
@@ -298,19 +306,21 @@ void CommandRouter::_handlePair(const char *json) {
 
         uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
         Frame_t frame = {};
-        frame.magic    = FRAME_MAGIC;
-        frame.msg_type = MSG_DISCOVERY;
-        frame.seq      = _seq++;
-        frame.src_role = ROLE_HUB;
-        frame.dst_role = ROLE_BROADCAST;
-        frame.flags    = 0;
-        frame.len      = sizeof(DiscoveryPayload_t);
+        frame.magic      = FRAME_MAGIC;
+        frame.msg_type   = MSG_DISCOVERY;
+        frame.seq        = _seq++;
+        frame.src_role   = ROLE_HUB;
+        frame.dst_role   = ROLE_BROADCAST;
+        frame.flags      = 0;
+        frame.network_id = (_hubCfg) ? _hubCfg->network_id : (uint8_t)HUB_NETWORK_ID;
+        frame.len        = sizeof(DiscoveryPayload_t);
         memcpy(frame.payload, &disc, sizeof(disc));
 
         uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
         memcpy(frame.payload + frame.len, &crc, 2);
         _espnow->send(bcast, &frame);
-        Serial.println("[ROUTER] Discovery scan broadcast sent");
+        Serial.printf("[ROUTER] Discovery scan broadcast sent (nid=0x%02X)\n",
+                      frame.network_id);
     } else {
         // action==2: unpair – keep original MSG_PAIR logic
         PairPayload_t pair = {};
@@ -320,13 +330,14 @@ void CommandRouter::_handlePair(const char *json) {
 
         uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
         Frame_t frame = {};
-        frame.magic    = FRAME_MAGIC;
-        frame.msg_type = MSG_PAIR;
-        frame.seq      = _seq++;
-        frame.src_role = ROLE_HUB;
-        frame.dst_role = ROLE_BROADCAST;
-        frame.flags    = FLAG_ACK_REQ;
-        frame.len      = sizeof(PairPayload_t);
+        frame.magic      = FRAME_MAGIC;
+        frame.msg_type   = MSG_PAIR;
+        frame.seq        = _seq++;
+        frame.src_role   = ROLE_HUB;
+        frame.dst_role   = ROLE_BROADCAST;
+        frame.flags      = FLAG_ACK_REQ;
+        frame.network_id = (_hubCfg) ? _hubCfg->network_id : (uint8_t)HUB_NETWORK_ID;
+        frame.len        = sizeof(PairPayload_t);
         memcpy(frame.payload, &pair, sizeof(pair));
 
         uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
@@ -437,13 +448,14 @@ void CommandRouter::_buildAndSend(uint8_t role, uint8_t msgType,
     }
 
     Frame_t frame = {};
-    frame.magic    = FRAME_MAGIC;
-    frame.msg_type = msgType;
-    frame.seq      = _seq++;
-    frame.src_role = ROLE_HUB;
-    frame.dst_role = role;
-    frame.flags    = flags;
-    frame.len      = payLen;
+    frame.magic      = FRAME_MAGIC;
+    frame.msg_type   = msgType;
+    frame.seq        = _seq++;
+    frame.src_role   = ROLE_HUB;
+    frame.dst_role   = role;
+    frame.flags      = flags;
+    frame.network_id = (_hubCfg) ? _hubCfg->network_id : (uint8_t)HUB_NETWORK_ID;
+    frame.len        = payLen;
     if (payLen > FRAME_MAX_PAYLOAD) return;  // bounds check
     memcpy(frame.payload, payload, payLen);
 

@@ -49,3 +49,15 @@
 
 // ── ESP-NOW ───────────────────────────────────────────────────
 #define ESPNOW_MAX_PAYLOAD   180
+
+// ── Anti-mis-pairing: system / network identity ───────────────
+// The network_id is carried in every frame's reserved byte.
+// Only frames whose network_id matches HUB_NETWORK_ID (or is 0x00 = legacy)
+// are accepted. Devices of other BotConnectingWifiSystem systems in range
+// will be silently rejected.
+//
+// IMPORTANT: Change this value (1–255) to match ESPNOW_NETWORK_ID in
+// ESP_Satellite/include/sat_config.h when isolating deployments.
+#ifndef HUB_NETWORK_ID
+#define HUB_NETWORK_ID       0x01
+#endif

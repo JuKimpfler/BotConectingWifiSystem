@@ -4,6 +4,7 @@
 // ============================================================
 
 #include "ConfigStore.h"
+#include "hub_config.h"
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
@@ -28,6 +29,7 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
     cfg.heartbeat_interval_ms = 1000;
     cfg.heartbeat_timeout_ms  = 4000;
     cfg.ui_rate_limit_ms      = 20;
+    cfg.network_id            = HUB_NETWORK_ID;
     strncpy(cfg.ui_theme, "dark", sizeof(cfg.ui_theme));
     peers.clear();
 
@@ -49,6 +51,7 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
 
     cfg.version          = doc["version"]                        | 1;
     cfg.channel          = doc["channel"]                        | 6;
+    cfg.network_id       = doc["network_id"]                     | (uint8_t)HUB_NETWORK_ID;
     cfg.telemetry_max_hz = doc["telemetry"]["max_rate_hz"]       | 20;
     cfg.heartbeat_interval_ms = doc["heartbeat"]["interval_ms"]  | 1000;
     cfg.heartbeat_timeout_ms  = doc["heartbeat"]["timeout_ms"]   | 4000;
@@ -102,8 +105,9 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
 
 bool ConfigStore::save(const HubConfig &cfg, const PeerRegistry &peers) {
     JsonDocument doc;
-    doc["version"] = cfg.version;
-    doc["channel"] = cfg.channel;
+    doc["version"]    = cfg.version;
+    doc["channel"]    = cfg.channel;
+    doc["network_id"] = cfg.network_id;
 
     doc["telemetry"]["max_rate_hz"]     = cfg.telemetry_max_hz;
     doc["heartbeat"]["interval_ms"]     = cfg.heartbeat_interval_ms;

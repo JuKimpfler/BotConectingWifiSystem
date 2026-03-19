@@ -69,7 +69,9 @@ typedef struct {
     uint8_t  dst_role;    // ROLE_* of intended recipient
     uint8_t  flags;       // FLAG_* bitmask
     uint8_t  len;         // Payload length in bytes (0..180)
-    uint8_t  reserved;    // Reserved, set to 0
+    uint8_t  network_id;  // Anti-mis-pairing: set to ESPNOW_NETWORK_ID / HUB_NETWORK_ID.
+                          // 0x00 = legacy / accept-any; 0x01-0xFF = system-specific.
+                          // Frames whose network_id doesn't match the receiver's are dropped.
     uint8_t  payload[FRAME_MAX_PAYLOAD];
     uint16_t crc16;       // CRC-16/IBM over bytes [0..header+payload-1]
 } Frame_t;

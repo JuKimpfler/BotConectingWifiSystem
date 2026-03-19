@@ -44,6 +44,19 @@
 #define NVS_KEY_PEER_MAC     "peer_mac"
 #define NVS_KEY_CHANNEL      "channel"
 
+// ── Anti-mis-pairing: system / network identity ───────────────
+// The network_id is carried in every frame's reserved byte.
+// Two devices will only communicate if their ESPNOW_NETWORK_ID values match,
+// or if either side uses the legacy value 0x00 (any).
+//
+// IMPORTANT: Change this value (1–255) whenever multiple independent
+// BotConnectingWifiSystem deployments are within ESP-NOW range of each other
+// to prevent accidental cross-system pairing or telemetry crosstalk.
+// Must match HUB_NETWORK_ID in ESP_Hub/include/hub_config.h.
+#ifndef ESPNOW_NETWORK_ID
+#define ESPNOW_NETWORK_ID    0x01
+#endif
+
 // ── UART Bridge to USB (USB-only mode) ────────────────────────
 // When UART_BRIDGE_USB is defined:
 //   • HW UART TX/RX is disabled.

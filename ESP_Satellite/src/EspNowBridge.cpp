@@ -5,16 +5,12 @@
 
 #include "EspNowBridge.h"
 #include "crc16.h"
+#include "sat_config.h"
 #include <esp_wifi.h>
 
 EspNowBridge &EspNowBridge::instance() {
     static EspNowBridge instance;
     return instance;
-}
-
-static bool _isBroadcastMac(const uint8_t *mac) {
-    static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    return mac && memcmp(mac, kBroadcast, 6) == 0;
 }
 
 bool EspNowBridge::begin(uint8_t channel) {
@@ -30,6 +26,10 @@ bool EspNowBridge::begin(uint8_t channel) {
 
     esp_now_register_send_cb(_onSent);
     esp_now_register_recv_cb(_onRecv);
+
+    // Register broadcast peer so discovery scans can be sent
+    uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    addPeer(bcast);
 
     Serial.printf("[BRIDGE] SAT%d ready ch=%u\n", SAT_ID, channel);
     return true;
@@ -89,10 +89,8 @@ bool EspNowBridge::removePeer(const uint8_t *mac) {
 }
 
 bool EspNowBridge::send(const uint8_t *mac, const Frame_t *frame) {
-    bool isBroadcast = _isBroadcastMac(mac);
-
-    // Ensure peer is registered before attempting send
-    if (!isBroadcast && !esp_now_is_peer_exist(mac)) {
+    // Ensure peer is registered before attempting send (unicast and broadcast alike)
+    if (!esp_now_is_peer_exist(mac)) {
         StoredPeer *sp = _findStoredPeer(mac);
         if (sp && sp->valid) {
             addPeer(mac, sp->encrypt, sp->encrypt ? (const char *)sp->lmk : nullptr);
@@ -194,9 +192,22 @@ void EspNowBridge::_onRecv(const uint8_t *mac,
         return;
     }
 
-    Serial.printf("[BRIDGE] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u\n",
+    Serial.printf("[BRIDGE] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u nid=0x%02X\n",
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                  f->msg_type, f->seq, f->src_role);
+                  f->msg_type, f->seq, f->src_role, f->network_id);
+
+    // Anti-mis-pairing: reject frames from other BotConnectingWifiSystem deployments.
+    // 0x00 means legacy / accept-any and is always allowed.
+    uint8_t incoming_nid = f->network_id;
+    if (incoming_nid != 0x00 &&
+        ESPNOW_NETWORK_ID != 0x00 &&
+        incoming_nid != (uint8_t)ESPNOW_NETWORK_ID) {
+        Serial.printf("[BRIDGE] DROPPED – foreign network_id 0x%02X (ours 0x%02X) "
+                      "from %02X:%02X:%02X:%02X:%02X:%02X\n",
+                      incoming_nid, (uint8_t)ESPNOW_NETWORK_ID,
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        return;
+    }
 
     EspNowBridge &self = instance();
     if (self._recvCb) {
