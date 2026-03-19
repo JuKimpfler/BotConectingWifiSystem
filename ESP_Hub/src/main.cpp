@@ -16,6 +16,7 @@
 #include "CommandRouter.h"
 #include "TelemetryBuffer.h"
 #include "HeartbeatService.h"
+#include "StatusLeds.h"
 
 // ─── Global objects ───────────────────────────────────────────
 AsyncWebServer  server(WS_PORT);
@@ -26,6 +27,40 @@ HubConfig       hubCfg;
 TelemetryBuffer telem;
 HeartbeatService heartbeat;
 CommandRouter   router;
+StatusLeds      statusLeds;
+BatteryMonitor  batteryMon;
+
+// ─── Reset button state ───────────────────────────────────────
+static uint32_t g_resetPressedAt = 0;
+static const uint32_t RESET_HOLD_MS = 800;
+
+// ─── Helpers ──────────────────────────────────────────────────
+static void updateIndicators() {
+    batteryMon.tick();
+    statusLeds.setBattery(batteryMon.state());
+
+    PeerInfo *sat1 = peers.findByRole(ROLE_SAT1);
+    PeerInfo *sat2 = peers.findByRole(ROLE_SAT2);
+    statusLeds.setSatOnline(1, sat1 && sat1->online);
+    statusLeds.setSatOnline(2, sat2 && sat2->online);
+    statusLeds.tick();
+}
+
+static void handleResetButton() {
+#if PIN_BTN_RESET >= 0
+    int level = digitalRead(PIN_BTN_RESET);
+    if (level == LOW) {
+        if (g_resetPressedAt == 0) g_resetPressedAt = millis();
+        if ((millis() - g_resetPressedAt) >= RESET_HOLD_MS) {
+            Serial.println("[HUB] Reset button held – restarting");
+            delay(50);
+            ESP.restart();
+        }
+    } else {
+        g_resetPressedAt = 0;
+    }
+#endif
+}
 
 // ─── ESP-NOW receive callback ─────────────────────────────────
 static void onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
@@ -53,6 +88,12 @@ void setup() {
     Serial.begin(115200);
     delay(400);
     Serial.println("\n[HUB] Booting...");
+
+#if PIN_BTN_RESET >= 0
+    pinMode(PIN_BTN_RESET, INPUT_PULLUP);
+#endif
+    statusLeds.begin();
+    batteryMon.begin();
 
     // Mount filesystem and load config
     cfgStore.begin();
@@ -128,6 +169,8 @@ void setup() {
     Serial.printf("[HUB] HTTP server started, AP SSID: %s\n", AP_SSID);
     Serial.printf("[HUB] IP: %s  |  URL: http://%s\n",
                   WiFi.softAPIP().toString().c_str(), DNS_HOSTNAME);
+
+    statusLeds.setWebActive(true);
 }
 
 // ─── Loop ─────────────────────────────────────────────────────
@@ -137,4 +180,6 @@ void loop() {
     ws.cleanupClients(4);
     router.tick();
     heartbeat.tick(peers, EspNowManager::instance());
+    handleResetButton();
+    updateIndicators();
 }

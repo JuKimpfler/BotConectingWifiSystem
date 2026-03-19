@@ -196,12 +196,20 @@ ESP32-C3 SAT1                    Teensy 4.0 #1
 
 ### ESP32-C3 Hub (ESP #3)
 
-The hub uses WiFi only; no GPIO pins are required for operation.
+Status LEDs and a reset button are brought out so they can be mounted in the 3D-printed case. Wire LEDs with a 330–1kΩ series resistor to 3.3V (or sink to GND) and keep battery sense below 3.3V using a divider (e.g., 100k/100k for 2:1).
 
-| Pin | Function | Notes |
-|-----|----------|-------|
-| USB-C | Power & Programming | Connect to computer or 5V power |
-| Built-in LED | Status indicator | Optional – can be used for status |
+| Pin | GPIO | Function | Notes |
+|-----|------|----------|-------|
+| D10 | GPIO10 | Power LED (onboard) | On while firmware runs |
+| D2 | GPIO4 | Battery LED | On when <3.6V; blinks while charger STAT is active-low |
+| D3 | GPIO5 | Webserver LED | On once the HTTP/WebSocket server is up |
+| D4 | GPIO6 | SAT1 link LED | On when SAT1 shows orange/green in the UI |
+| D5 | GPIO7 | SAT2 link LED | On when SAT2 shows orange/green in the UI |
+| D6 | GPIO21 | Reset button | Active-low to GND, hold ≈0.8s to reboot |
+| D7 | GPIO20 | Charger status input | Optional: connect charger STAT (active low) so the battery LED can blink while charging |
+| A1 | GPIO3 | Battery sense | Analog input via divider from the BAT pad; keep ≤3.3V |
+| USB-C | Power & Programming | 5V in and flashing |
+| BAT | Battery input | Connect LiPo/Li-ion to onboard charger |
 
 ### ESP32-C3 Satellite (ESP #1, #2)
 

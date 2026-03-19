@@ -8,6 +8,19 @@
 
 // ── Hardware ─────────────────────────────────────────────────
 #define PIN_LED_STATUS       10   // Seeed XIAO ESP32-C3 onboard LED
+#define PIN_LED_POWER        PIN_LED_STATUS
+#define PIN_LED_BAT_LOW      D2   // External LED: steady=low battery, blink=charging
+#define PIN_LED_WEBSERVER    D3
+#define PIN_LED_SAT1         D4
+#define PIN_LED_SAT2         D5
+#define PIN_BTN_RESET        D6   // Active-low reset button to GND
+#define PIN_CHARGE_STATUS    D7   // Optional: charger STAT (active low)
+#define PIN_BATTERY_SENSE    A1   // Analog battery divider input
+
+#define BATTERY_VDIVIDER           2.0f   // Voltage divider factor (e.g. 100k/100k -> 2.0)
+#define BATTERY_LOW_MV             3600   // LED on when battery below this (mV)
+#define BATTERY_SAMPLE_INTERVAL_MS 5000
+#define BATTERY_CHARGE_BLINK_MS     500
 
 // ── WiFi / ESP-NOW ────────────────────────────────────────────
 #define DEFAULT_CHANNEL      6
