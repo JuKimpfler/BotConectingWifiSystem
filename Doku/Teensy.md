@@ -727,33 +727,36 @@ BC.onControl([](int16_t spd, int16_t ang, uint8_t sw, uint8_t btn, uint8_t start
 
 ## Advanced Usage
 
-### P2P Communication
+### P2P Communication (geordnete Library-Funktion)
 
-Send custom messages to peer robot (via P2P bridge):
+Der BotConnect-Code bringt nun eine geordnete P2P-API mit, die eingehende Peer-Nachrichten in einer FIFO-Warteschlange speichert (8 Nachrichten, je max. 255 Zeichen) und sowohl Callback als auch Polling unterstützt.
 
+**Senden (Text oder Binär):**
 ```cpp
-void sendToPeer(const char *msg) {
-    // Don't use DBG: prefix (that goes to hub)
-    Serial1.println(msg);  // Directly to UART
-}
+BC.sendP2P("BALL:MINE");              // Newline wird automatisch ergänzt
+uint8_t payload[] = {0x01, 0x02, 0x0A};
+BC.sendP2P(payload, sizeof(payload)); // Binärdaten, \n wird angehängt falls nötig
+```
 
-void receiveFromPeer() {
-    if (Serial1.available()) {
-        String msg = Serial1.readStringUntil('\n');
-
-        // Check if it's a telemetry line (ignore)
-        if (msg.startsWith("DBG:")) {
-            return;
-        }
-
-        // Process P2P message
-        if (msg == "BALL:MINE") {
-            // Peer has the ball
-            adjustStrategy();
-        }
+**Empfangen (Polling, geordnete Auslieferung):**
+```cpp
+char msg[256];
+if (BC.readP2P(msg, sizeof(msg))) {
+    if (strcmp(msg, "BALL:MINE") == 0) {
+        adjustStrategy();
     }
 }
 ```
+
+**Empfangen per Callback:**
+```cpp
+BC.onP2P([](const char *msg) {
+    // msg ist bereits ohne DBG:-Telemetry, Reihenfolge bleibt erhalten
+});
+```
+
+- Nachrichten, die mit `DBG:` beginnen, gehen wie bisher an den Hub und landen nicht in der P2P-Warteschlange.
+- Längere P2P-Zeilen werden sicher gekürzt, die Zustellreihenfolge bleibt erhalten.
 
 > **Note:** See [Bridge.md](Bridge.md) for P2P bridge details.
 

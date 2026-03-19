@@ -14,6 +14,8 @@ void BotConnect::begin(HardwareSerial &serial, uint8_t satId) {
     _serial = &serial;
     _satId  = satId;
     _rxIdx  = 0;
+    _p2pHead = 0;
+    _p2pCount = 0;
 }
 
 // ─── Main loop ───────────────────────────────────────────────
@@ -87,10 +89,9 @@ void BotConnect::_parseLine(const char *line) {
 
     // Everything else is treated as a P2P message from the peer robot
     // This includes any custom messages that don't match the above patterns
-    if (_onP2P) {
-        _onP2P(line);
-        return;
-    }
+    _enqueueP2P(line);
+    if (_onP2P) _onP2P(line);
+    return;
 
     // If we reach here and debug is enabled, log unknown command
     if (_debugEnabled) {
@@ -147,20 +148,70 @@ void BotConnect::sendAck(uint8_t seq, uint8_t status) {
 // The message is sent without the "DBG:" prefix, so it will be
 // transparently forwarded by the ESP satellite to the peer satellite,
 // which will then output it to the peer Teensy's UART.
-void BotConnect::sendP2P(const char *message) {
-    if (!_serial || !message) return;
-    // Send message directly (no DBG: prefix)
-    // Add newline if not present
+bool BotConnect::sendP2P(const char *message) {
+    if (!_serial || !message) return false;
+    // Send message directly (no DBG: prefix), ensure newline terminator
     size_t len = strlen(message);
     if (len > 0 && message[len - 1] == '\n') {
         _sendLine(message);
     } else {
-        char buf[256];
+        char buf[P2P_MAX_MSG_LEN];
         snprintf(buf, sizeof(buf), "%s\n", message);
         _sendLine(buf);
     }
+    return true;
+}
+
+bool BotConnect::sendP2P(const uint8_t *data, size_t len) {
+    if (!_serial || !data || len == 0) return false;
+    // Copy into bounded buffer to guarantee newline termination
+    uint8_t buf[P2P_MAX_MSG_LEN];
+    size_t copyLen = (len < (P2P_MAX_MSG_LEN - 1)) ? len : (P2P_MAX_MSG_LEN - 1);
+    memcpy(buf, data, copyLen);
+
+    size_t outLen = copyLen;
+    // Append newline if caller did not include one (and space available)
+    if (copyLen == 0 || buf[copyLen - 1] != '\n') {
+        buf[outLen++] = '\n';
+    }
+
+    _serial->write(buf, outLen);
+    return true;
+}
+
+bool BotConnect::readP2P(char *out, size_t maxLen) {
+    if (!out || maxLen == 0 || _p2pCount == 0) return false;
+    const char *src = _p2pQueue[_p2pHead];
+    strncpy(out, src, maxLen - 1);
+    out[maxLen - 1] = '\0';
+    _p2pHead = (uint8_t)((_p2pHead + 1) % P2P_QUEUE_SIZE);
+    _p2pCount--;
+    return true;
+}
+
+bool BotConnect::readP2P(String &out) {
+    if (_p2pCount == 0) return false;
+    out = _p2pQueue[_p2pHead];
+    _p2pHead = (uint8_t)((_p2pHead + 1) % P2P_QUEUE_SIZE);
+    _p2pCount--;
+    return true;
 }
 
 void BotConnect::_sendLine(const char *line) {
     if (_serial) _serial->print(line);
+}
+
+void BotConnect::_enqueueP2P(const char *line) {
+    if (!line || line[0] == '\0') return;
+
+    uint8_t insertIdx = (uint8_t)((_p2pHead + _p2pCount) % P2P_QUEUE_SIZE);
+    // If the queue is full, drop the oldest entry
+    if (_p2pCount == P2P_QUEUE_SIZE) {
+        _p2pHead = (uint8_t)((_p2pHead + 1) % P2P_QUEUE_SIZE);
+        _p2pCount--;
+    }
+
+    strncpy(_p2pQueue[insertIdx], line, P2P_MAX_MSG_LEN - 1);
+    _p2pQueue[insertIdx][P2P_MAX_MSG_LEN - 1] = '\0';
+    _p2pCount++;
 }
