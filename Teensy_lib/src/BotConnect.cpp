@@ -48,6 +48,7 @@ void BotConnect::process() {
 //   V200A-45SW3BTN0START1    -> control
 //   M3                        -> mode
 //   CAL_IR_MAX                -> calibrate
+//   HELLO_FROM_PEER           -> P2P message (anything else)
 void BotConnect::_parseLine(const char *line) {
     if (!line || line[0] == '\0') return;
 
@@ -77,9 +78,24 @@ void BotConnect::_parseLine(const char *line) {
         return;
     }
 
+    // ACK responses: ACK<seq>:<status>
+    // These are internal acknowledgements, typically not used by user code
+    if (strncmp(line, "ACK", 3) == 0) {
+        // Could be handled in future if needed
+        return;
+    }
+
+    // Everything else is treated as a P2P message from the peer robot
+    // This includes any custom messages that don't match the above patterns
+    if (_onP2P) {
+        _onP2P(line);
+        return;
+    }
+
+    // If we reach here and debug is enabled, log unknown command
     if (_debugEnabled) {
         char dbg[64];
-        snprintf(dbg, sizeof(dbg), "[BC] unknown cmd: %s", line);
+        snprintf(dbg, sizeof(dbg), "[BC] unhandled: %s", line);
         // Can't use Serial inside lib without knowing which port
         // Caller can log via custom handler if needed
         (void)dbg;
@@ -124,6 +140,25 @@ void BotConnect::sendAck(uint8_t seq, uint8_t status) {
     char buf[32];
     snprintf(buf, sizeof(buf), "ACK%u:%u\n", seq, status);
     _sendLine(buf);
+}
+
+// ─── P2P communication ────────────────────────────────────────
+// Send a message to the peer robot via the P2P bridge.
+// The message is sent without the "DBG:" prefix, so it will be
+// transparently forwarded by the ESP satellite to the peer satellite,
+// which will then output it to the peer Teensy's UART.
+void BotConnect::sendP2P(const char *message) {
+    if (!_serial || !message) return;
+    // Send message directly (no DBG: prefix)
+    // Add newline if not present
+    size_t len = strlen(message);
+    if (len > 0 && message[len - 1] == '\n') {
+        _sendLine(message);
+    } else {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "%s\n", message);
+        _sendLine(buf);
+    }
 }
 
 void BotConnect::_sendLine(const char *line) {
