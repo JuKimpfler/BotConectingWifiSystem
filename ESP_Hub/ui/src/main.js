@@ -495,11 +495,19 @@ document.getElementById('btn-save-cfg').addEventListener('click', () => {
   }, 5000)
 })
 
-// Clear ACK timeout when a settings ACK arrives
+// Clear ACK timeout when a settings ACK arrives (MSG_SETTINGS = 9)
 wsOn('ack', (msg) => {
   if (_settingsAckTimer && msg.msg_type === 9) {
     clearTimeout(_settingsAckTimer)
     _settingsAckTimer = null
+    // Update feedback to show success
+    if (msg.status === 0) {
+      settingsFeedback.textContent = 'Settings saved successfully'
+      settingsFeedback.className = 'feedback'
+    } else {
+      settingsFeedback.textContent = `Settings save failed (status ${msg.status})`
+      settingsFeedback.className = 'feedback error'
+    }
   }
 })
 

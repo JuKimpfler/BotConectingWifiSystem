@@ -1,9 +1,28 @@
-Buglist :
+Buglist - Status: ALLE BEHOBEN (Stand: 2026-03-19)
 
-1. Der Save Config Button macht nichts bzw scheint sich aufzuhängen. 
-2. Bei neu laden der Website wird der user als neuer user bzw als 2 oder 3 user angemeldet und die webui wird nichtmehr mit daten versorgt... 
-3. Die Texteingabe im Manual modus und die switches im Manual mode werden aktuell nicht geupdated und versendet. 
-4. Manual information soll zyklisch gesendet werden ( nur pfeiltasten nicht bt und sw daten. ) pfeiltasten sollen auch dauerhaft gedrückt werden können. Quasi wie ein joystick mit welchem man den "Roboter" welher mit dem teensy gesteuert wird bewegen kann sobald V != 0 fahre mit Speed in Richtung von Pfeiltaste. ( Falls dies möglich ist und mit der laufzeit und rechenleistung kopatibel ist. ersetze die pfeiltaste durch einen Joystick um den ( mit omni wheels ausgerüsteten ) Roboter in jede richtung zu steuern ) 
-5. Angle ist aktuell immer als 45 gesendet nicht als eingegebener wert.
-6. Es soll eine allgemeine Auswahl möglichkeit zum wechsel zwischen sat1 und sat2 geben und nicht nur im manual mode. 
- 
+1. [BEHOBEN] Der Save Config Button macht nichts bzw scheint sich aufzuhängen.
+   → Lösung: ACK-Handler zeigt jetzt "Settings saved successfully" an
+   → Datei: ESP_Hub/ui/src/main.js (Zeilen 498-512)
+
+2. [BEREITS BEHOBEN] Bei neu laden der Website wird der user als neuer user bzw als 2 oder 3 user angemeldet und die webui wird nichtmehr mit daten versorgt...
+   → Lösung: WebSocket schließt alte Verbindung vor Reconnect
+   → Datei: ESP_Hub/ui/src/ws.js (Zeilen 25-29)
+
+3. [BEREITS FUNKTIONSFÄHIG] Die Texteingabe im Manual modus und die switches im Manual mode werden aktuell nicht geupdated und versendet.
+   → Status: Switches und Speed-Input haben funktionierende Change-Listener
+   → Dateien: ESP_Hub/ui/src/main.js (Zeilen 407-416)
+
+4. [BEREITS IMPLEMENTIERT] Manual information soll zyklisch gesendet werden ( nur pfeiltasten nicht bt und sw daten. ) pfeiltasten sollen auch dauerhaft gedrückt werden können. Quasi wie ein joystick mit welchem man den "Roboter" welher mit dem teensy gesteuert wird bewegen kann sobald V != 0 fahre mit Speed in Richtung von Pfeiltaste. ( Falls dies möglich ist und mit der laufzeit und rechenleistung kopatibel ist. ersetze die pfeiltaste durch einen Joystick um den ( mit omni wheels ausgerüsteten ) Roboter in jede richtung zu steuern )
+   → Lösung: Vollwertiger Joystick mit 50ms zyklischem Send implementiert
+   → Datei: ESP_Hub/ui/src/main.js (Zeilen 265-404)
+
+5. [BEHOBEN] Angle ist aktuell immer als 45 gesendet nicht als eingegebener wert.
+   → Lösung: Joystick berechnet Angle dynamisch (0°-360°)
+   → Datei: ESP_Hub/ui/src/main.js (Zeile 335)
+
+6. [BEREITS IMPLEMENTIERT] Es soll eine allgemeine Auswahl möglichkeit zum wechsel zwischen sat1 und sat2 geben und nicht nur im manual mode.
+   → Lösung: Globale SAT1/SAT2 Buttons im Header auf allen Tabs
+   → Dateien: ESP_Hub/ui/index.html (14-17), ESP_Hub/ui/src/main.js (229-236)
+
+Siehe FIXED_BUGS.txt für detaillierte Dokumentation aller Fixes.
+
