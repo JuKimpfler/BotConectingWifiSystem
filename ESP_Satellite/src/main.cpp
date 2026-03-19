@@ -50,6 +50,8 @@ static bool     g_hubOnline  = false;
 
 // ── P2P send interval ─────────────────────────────────────────
 static uint32_t g_lastP2pSend = 0;
+static uint32_t g_lastPeerDiscovery = 0;
+static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 // ─── USB serial command handler ──────────────────────────────
 static char s_serialCmdBuf[64];
@@ -69,6 +71,15 @@ static const char *monitorModeName(MonitorMode mode) {
         case MONITOR_BRIDGE: return "Bridge";
         case MONITOR_STATUS: return "Status";
         default:             return "Unknown";
+    }
+}
+
+static const char *roleName(uint8_t role) {
+    switch (role) {
+        case ROLE_SAT1: return "SAT1";
+        case ROLE_SAT2: return "SAT2";
+        case ROLE_HUB:  return "HUB";
+        default:        return "UNK";
     }
 }
 
@@ -101,6 +112,69 @@ static bool tryParseMonitorMode(const char *cmd, MonitorMode *outMode) {
     return false;
 }
 
+static void learnPeerMac(const uint8_t *mac, uint8_t srcRole) {
+    if (!mac) return;
+    if (srcRole == ROLE_HUB) return;
+    uint8_t selfRole = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    if (srcRole == selfRole) return;
+    // Ignore zero MAC
+    bool allZero = true;
+    for (int i = 0; i < 6; ++i) {
+        if (mac[i] != 0) { allZero = false; break; }
+    }
+    if (allZero) return;
+
+    bool changed = (!g_peerKnown) || memcmp(g_peerMac, mac, 6) != 0;
+    if (!changed) return;
+
+    if (g_peerKnown) {
+        EspNowBridge::instance().removePeer(g_peerMac);
+    }
+
+    memcpy(g_peerMac, mac, 6);
+    g_peerKnown = true;
+    EspNowBridge::instance().addPeer(g_peerMac);
+
+    Preferences prefs;
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putBytes(NVS_KEY_PEER_MAC, g_peerMac, 6);
+    prefs.end();
+
+    if (g_monitorMode == MONITOR_STATUS || g_monitorMode == MONITOR_BRIDGE) {
+        USB_DEBUG_PRINTF("[SAT%d] Peer learned: %02X:%02X:%02X:%02X:%02X:%02X (%s)\n",
+                         SAT_ID,
+                         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                         roleName(srcRole));
+    }
+}
+
+static void sendPeerDiscovery() {
+    DiscoveryPayload_t req = {};
+    req.action  = 0;
+    req.role    = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    req.channel = g_channel;
+    snprintf(req.name, sizeof(req.name), "SAT%d", SAT_ID);
+    WiFi.macAddress(req.mac);
+
+    Frame_t frame = {};
+    frame.magic    = FRAME_MAGIC;
+    frame.msg_type = MSG_DISCOVERY;
+    frame.seq      = g_seq++;
+    frame.src_role = req.role;
+    frame.dst_role = ROLE_BROADCAST;
+    frame.flags    = 0;
+    frame.len      = sizeof(req);
+    memcpy(frame.payload, &req, sizeof(req));
+
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+    memcpy(frame.payload + frame.len, &crc, 2);
+
+    bool ok = EspNowBridge::instance().send(BROADCAST_MAC, &frame);
+    if (g_monitorMode == MONITOR_BRIDGE || g_monitorMode == MONITOR_STATUS) {
+        USB_DEBUG_PRINTF("[SAT%d] Discovery broadcast %s\n", SAT_ID, ok ? "sent" : "failed");
+    }
+}
+
 static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel) return false;
     Frame_t frame;
@@ -131,7 +205,13 @@ static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
 
 // ─── Forward raw UART line to peer satellite (transparent bridge) ─
 static bool forwardUartRawToPeer(const char *line) {
-    if (!line || !g_peerKnown) return false;
+    if (!line) return false;
+    if (!g_peerKnown) {
+        if (g_monitorMode == MONITOR_BRIDGE || g_monitorMode == MONITOR_STATUS) {
+            USB_DEBUG_PRINTF("[SAT%d] P2P drop – peer unknown\n", SAT_ID);
+        }
+        return true;
+    }
 
     size_t len = strlen(line);
     if (len == 0 || len > FRAME_MAX_PAYLOAD) return false;
@@ -274,6 +354,8 @@ static bool sendFrame(const uint8_t *mac, uint8_t msgType,
 
 // ─── ESP-NOW receive callback ─────────────────────────────────
 static void onFrame(const uint8_t *mac, const Frame_t *frame) {
+    learnPeerMac(mac, frame->src_role);
+
     switch (frame->msg_type) {
 
     case MSG_HEARTBEAT:
@@ -519,6 +601,12 @@ void loop() {
         if (g_monitorMode == MONITOR_STATUS) {
             USB_DEBUG_PRINTF("[SAT%d] Hub offline – P2P bridge still active\n", SAT_ID);
         }
+    }
+
+    // ── Discover peer satellite when unknown ──────────────────
+    if (!g_peerKnown && (now - g_lastPeerDiscovery) >= 1000) {
+        g_lastPeerDiscovery = now;
+        sendPeerDiscovery();
     }
 
     // ── ACK retry tick ────────────────────────────────────────
