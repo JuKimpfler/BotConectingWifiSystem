@@ -105,7 +105,11 @@ static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel) return false;
     Frame_t frame;
     if (!parser.uartLineToFrame(line, SAT_ID, &frame)) return false;
-    frame.seq = g_seq++;
+    uint8_t seq = g_seq++;
+    frame.seq = seq;
+    // Recompute CRC after assigning the final sequence number
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+    memcpy(frame.payload + frame.len, &crc, 2);
 
     if (g_hubKnown) {
         bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
