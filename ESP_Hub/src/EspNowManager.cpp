@@ -203,19 +203,23 @@ void EspNowManager::_onRecv(const uint8_t *mac,
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                   f->msg_type, f->seq, f->src_role, f->network_id);
 
+    EspNowManager &self = instance();
+
     // Anti-mis-pairing: reject frames from other BotConnectingWifiSystem deployments.
+    // Use the runtime network_id (may have been changed via the web UI) rather than
+    // the compile-time HUB_NETWORK_ID constant.
     uint8_t incoming_nid = f->network_id;
+    uint8_t own_nid      = self._networkId;
     if (incoming_nid != 0x00 &&
-        HUB_NETWORK_ID != 0x00 &&
-        incoming_nid != (uint8_t)HUB_NETWORK_ID) {
+        own_nid       != 0x00 &&
+        incoming_nid  != own_nid) {
         Serial.printf("[ESPNOW] DROPPED – foreign network_id 0x%02X (ours 0x%02X) "
                       "from %02X:%02X:%02X:%02X:%02X:%02X\n",
-                      incoming_nid, (uint8_t)HUB_NETWORK_ID,
+                      incoming_nid, own_nid,
                       mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         return;
     }
 
-    EspNowManager &self = instance();
     if (self._recvCb) {
         self._recvCb(mac, f);
     }

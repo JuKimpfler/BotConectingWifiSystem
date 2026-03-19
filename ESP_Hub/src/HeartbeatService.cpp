@@ -34,7 +34,7 @@ void HeartbeatService::tick(PeerRegistry &peers, EspNowManager &espnow) {
     frame.src_role   = ROLE_HUB;
     frame.dst_role   = ROLE_BROADCAST;
     frame.flags      = 0;
-    frame.network_id = HUB_NETWORK_ID;
+    frame.network_id = espnow.getNetworkId();
     frame.len        = sizeof(HeartbeatPayload_t);
     memcpy(frame.payload, &hb, sizeof(hb));
 

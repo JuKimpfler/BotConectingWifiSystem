@@ -111,6 +111,7 @@ void setup() {
         espnow.begin(hubCfg.channel, nullptr);
     }
     espnow.setRecvCallback(onEspNowFrame);
+    espnow.setNetworkId(hubCfg.network_id);
 
     // Re-register persisted peers
     const int LTK_HEX_LEN = 32;  // 16 key bytes = 32 hex chars

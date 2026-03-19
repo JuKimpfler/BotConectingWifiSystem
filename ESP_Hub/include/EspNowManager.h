@@ -26,6 +26,11 @@ public:
 
     void setRecvCallback(FrameRecvCb cb) { _recvCb = cb; }
 
+    /** Update the runtime network identity used to filter incoming frames.
+     *  0x00 = legacy / accept-any. 0x01-0xFF = system-specific identity. */
+    void    setNetworkId(uint8_t nid) { _networkId = nid; }
+    uint8_t getNetworkId() const      { return _networkId; }
+
     /** Call from loop() to apply any pending peer-recovery requests. */
     void processDns() { _dns.processNextRequest(); }
     void tick();
@@ -63,7 +68,8 @@ private:
     StoredPeer *_findStoredPeer(const uint8_t *mac);
     void        _doRecovery(const uint8_t *mac);
 
-    FrameRecvCb _recvCb  = nullptr;
-    uint8_t     _channel = DEFAULT_CHANNEL;
+    FrameRecvCb _recvCb    = nullptr;
+    uint8_t     _channel   = DEFAULT_CHANNEL;
+    uint8_t     _networkId = HUB_NETWORK_ID;
     DNSServer   _dns;
 };

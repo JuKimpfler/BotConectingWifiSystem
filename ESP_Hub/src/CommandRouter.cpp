@@ -266,6 +266,7 @@ void CommandRouter::_handleSettings(const char *json) {
             Serial.printf("[ROUTER] network_id changed: 0x%02X -> 0x%02X\n",
                           _hubCfg->network_id, nid);
             _hubCfg->network_id = nid;
+            if (_espnow) _espnow->setNetworkId(nid);
         }
     }
     if (doc["telemetry_max_hz"].is<uint8_t>()) {
