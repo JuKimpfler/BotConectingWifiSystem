@@ -15,7 +15,7 @@ void BatteryMonitor::begin() {
 #if PIN_BATTERY_SENSE >= 0
     pinMode(PIN_BATTERY_SENSE, INPUT);
     analogReadResolution(12);
-    analogSetAttenuation(ADC_ATTEN_DB_11);
+    analogSetAttenuation(ADC_11db);
 #endif
 #if PIN_CHARGE_STATUS >= 0
     pinMode(PIN_CHARGE_STATUS, INPUT_PULLUP);

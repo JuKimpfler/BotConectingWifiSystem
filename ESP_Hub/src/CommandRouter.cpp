@@ -253,14 +253,14 @@ void CommandRouter::_handleSettings(const char *json) {
     }
 
     // Apply settings to runtime config
-    if (doc.containsKey("channel")) {
+    if (doc["channel"].is<uint8_t>()) {
         _hubCfg->channel = doc["channel"] | _hubCfg->channel;
     }
-    if (doc.containsKey("pmk")) {
+    if (doc["pmk"].is<const char *>()) {
         const char *pmk = doc["pmk"] | "";
         strlcpy(_hubCfg->pmk_hex, pmk, sizeof(_hubCfg->pmk_hex));
     }
-    if (doc.containsKey("network_id")) {
+    if (doc["network_id"].is<uint8_t>()) {
         uint8_t nid = doc["network_id"] | _hubCfg->network_id;
         if (nid != _hubCfg->network_id) {
             Serial.printf("[ROUTER] network_id changed: 0x%02X -> 0x%02X\n",
@@ -268,7 +268,7 @@ void CommandRouter::_handleSettings(const char *json) {
             _hubCfg->network_id = nid;
         }
     }
-    if (doc.containsKey("telemetry_max_hz")) {
+    if (doc["telemetry_max_hz"].is<uint8_t>()) {
         _hubCfg->telemetry_max_hz = doc["telemetry_max_hz"] | _hubCfg->telemetry_max_hz;
         // Update telemetry interval at runtime
         if (_telem && _hubCfg->telemetry_max_hz > 0) {

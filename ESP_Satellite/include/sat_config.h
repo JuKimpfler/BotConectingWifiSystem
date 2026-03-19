@@ -54,7 +54,7 @@
 // to prevent accidental cross-system pairing or telemetry crosstalk.
 // Must match HUB_NETWORK_ID in ESP_Hub/include/hub_config.h.
 #ifndef ESPNOW_NETWORK_ID
-#define ESPNOW_NETWORK_ID    0x01
+#define ESPNOW_NETWORK_ID    2
 #endif
 
 // ── UART Bridge to USB (USB-only mode) ────────────────────────
