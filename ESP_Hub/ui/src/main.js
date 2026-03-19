@@ -80,16 +80,42 @@ wsOn('peer_status', (msg) => {
   const peers = msg.peers || []
   peerList.innerHTML = ''
   peers.forEach(p => {
+    // Header badge: show data path health when online, presence-only when offline
     const badge = p.role === 'SAT1' ? sat1Badge : sat2Badge
-    badge.textContent = `${p.name || p.role} ${p.online ? '●' : '○'}`
-    badge.className = `badge ${p.online ? 'online' : 'offline'}`
+    const dataOk = p.online && p.data_path_ok
+    let statusSymbol, badgeClass, statusTitle
+    if (dataOk) {
+      statusSymbol = '●'
+      badgeClass = 'online'
+      statusTitle = 'Online – data path OK'
+    } else if (p.online) {
+      statusSymbol = '◑'
+      badgeClass = 'online-no-data'
+      statusTitle = 'Online – data path STALE (no recent data)'
+    } else {
+      statusSymbol = '○'
+      badgeClass = 'offline'
+      statusTitle = 'Offline'
+    }
+    badge.textContent = `${p.name || p.role} ${statusSymbol}`
+    badge.className = `badge ${badgeClass}`
+    badge.title = statusTitle
 
     const div = document.createElement('div')
     div.className = 'peer-item'
     const roleTag = document.createElement('span')
-    roleTag.className = `badge ${p.online ? 'online' : 'offline'}`
+    roleTag.className = `badge ${badgeClass}`
     roleTag.textContent = p.role || 'SAT'
+    roleTag.title = statusTitle
     div.appendChild(roleTag)
+
+    // Data-path indicator
+    const dataTag = document.createElement('span')
+    dataTag.className = `badge ${dataOk ? 'online' : 'offline'}`
+    dataTag.style.fontSize = '10px'
+    dataTag.textContent = dataOk ? 'DATA ●' : 'DATA ○'
+    dataTag.title = dataOk ? 'Data path confirmed OK' : 'No recent data delivery'
+    div.appendChild(dataTag)
 
     const nameInput = document.createElement('input')
     nameInput.className = 'peer-name-input'

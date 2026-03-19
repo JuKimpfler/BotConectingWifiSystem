@@ -133,6 +133,7 @@ void setup() {
 // ─── Loop ─────────────────────────────────────────────────────
 void loop() {
     EspNowManager::instance().processDns();
+    EspNowManager::instance().tick();
     ws.cleanupClients(4);
     router.tick();
     heartbeat.tick(peers, EspNowManager::instance());

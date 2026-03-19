@@ -72,6 +72,8 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
         Serial.printf("[ROUTER] telemetry from role=%u: %s\n",
                       frame->src_role, entry->name);
         _telem->ingest(entry);
+        // Confirmed data receipt – mark data path healthy
+        _peers->markDataOk(mac);
         break;
     }
     case MSG_ACK: {
@@ -79,6 +81,8 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
             reinterpret_cast<const AckPayload_t *>(frame->payload);
         Serial.printf("[ROUTER] ACK from role=%u seq=%u status=0x%02X msg_type=0x%02X\n",
                       frame->src_role, ack->ack_seq, ack->status, ack->msg_type);
+        // Confirmed data-path ACK
+        _peers->markDataOk(mac);
         char buf[64];
         snprintf(buf, sizeof(buf),
                  "{\"type\":\"ack\",\"seq\":%u,\"status\":%u,\"msg_type\":%u}",
@@ -147,13 +151,15 @@ void CommandRouter::broadcastPeerStatus() {
     JsonDocument doc;
     doc["type"] = "peer_status";
     JsonArray arr = doc["peers"].to<JsonArray>();
+    uint32_t now = millis();
     for (int i = 0; i < _peers->count(); i++) {
         PeerInfo *p = _peers->get(i);
         if (!p) continue;
         JsonObject o = arr.add<JsonObject>();
-        o["name"]   = p->name;
-        o["role"]   = (p->role == ROLE_SAT1) ? "SAT1" : "SAT2";
-        o["online"] = p->online;
+        o["name"]         = p->name;
+        o["role"]         = (p->role == ROLE_SAT1) ? "SAT1" : "SAT2";
+        o["online"]       = p->online;
+        o["data_path_ok"] = p->online && (now - p->lastDataOkMs) < DATA_PATH_TIMEOUT_MS;
         char macStr[18];
         snprintf(macStr, sizeof(macStr),
                  "%02X:%02X:%02X:%02X:%02X:%02X",
