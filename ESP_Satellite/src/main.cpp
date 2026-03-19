@@ -283,7 +283,14 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
                     USB_DEBUG_PRINTF("[SAT%d] Hub back online\n", SAT_ID);
                 }
             }
-            if (!g_hubKnown) {
+            // Always update hub MAC when it changes (handles hub reboot / NVS stale MAC)
+            bool macChanged = memcmp(g_hubMac, mac, 6) != 0;
+            if (!g_hubKnown || macChanged) {
+                if (g_hubKnown && macChanged) {
+                    // MAC changed – remove old peer entry before adding new one
+                    EspNowBridge::instance().removePeer(g_hubMac);
+                    USB_DEBUG_PRINTF("[SAT%d] Hub MAC changed, updating\n", SAT_ID);
+                }
                 memcpy(g_hubMac, mac, 6);
                 g_hubKnown = true;
                 // Register hub as ESP-NOW peer so we can send frames back
@@ -378,22 +385,29 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         const DiscoveryPayload_t *disc =
             reinterpret_cast<const DiscoveryPayload_t *>(frame->payload);
         if (disc->action == 0) {
+            // If the request came from the hub, always update its MAC
+            // (handles hub reboot or NVS containing a stale MAC)
+            if (frame->src_role == ROLE_HUB) {
+                bool macChanged = memcmp(g_hubMac, mac, 6) != 0;
+                if (!g_hubKnown || macChanged) {
+                    if (g_hubKnown && macChanged) {
+                        EspNowBridge::instance().removePeer(g_hubMac);
+                    }
+                    memcpy(g_hubMac, mac, 6);
+                    g_hubKnown = true;
+                    Preferences prefs;
+                    prefs.begin(NVS_NAMESPACE, false);
+                    prefs.putBytes(NVS_KEY_HUB_MAC, g_hubMac, 6);
+                    prefs.end();
+                    USB_DEBUG_PRINTF("[SAT%d] Hub MAC learned via discovery: "
+                                  "%02X:%02X:%02X:%02X:%02X:%02X\n",
+                                  SAT_ID,
+                                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                }
+            }
+
             // Ensure the requester is registered as an ESP-NOW peer so we can reply
             EspNowBridge::instance().addPeer(mac);
-
-            // If the request came from the hub, learn its MAC
-            if (frame->src_role == ROLE_HUB && !g_hubKnown) {
-                memcpy(g_hubMac, mac, 6);
-                g_hubKnown = true;
-                Preferences prefs;
-                prefs.begin(NVS_NAMESPACE, false);
-                prefs.putBytes(NVS_KEY_HUB_MAC, g_hubMac, 6);
-                prefs.end();
-                USB_DEBUG_PRINTF("[SAT%d] Hub MAC learned via discovery: "
-                              "%02X:%02X:%02X:%02X:%02X:%02X\n",
-                              SAT_ID,
-                              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-            }
 
             // Announce ourselves
             DiscoveryPayload_t resp = {};
@@ -501,6 +515,9 @@ void loop() {
     ackMgr.tick([](const uint8_t *mac, const Frame_t *frame) -> bool {
         return EspNowBridge::instance().send(mac, frame);
     });
+
+    // ── Peer recovery tick (re-register peers after fail-streak) ─
+    EspNowBridge::instance().tick();
 
     // ── USB serial command handler ────────────────────────────
     while (Serial.available()) {

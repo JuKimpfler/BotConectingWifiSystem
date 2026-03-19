@@ -61,6 +61,8 @@ body {
 
 .badge.online  { border-color: var(--green); color: var(--green); }
 .badge.offline { border-color: var(--text-dim); color: var(--text-dim); }
+/* online but data path stale – amber/yellow */
+.badge.online-no-data { border-color: #f0a500; color: #f0a500; }
 
 /* ── Tabs ────────────────────────────────────────────────── */
 .tabs {

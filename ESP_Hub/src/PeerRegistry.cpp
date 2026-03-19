@@ -68,6 +68,11 @@ void PeerRegistry::markOnline(const uint8_t *mac, bool online) {
     }
 }
 
+void PeerRegistry::markDataOk(const uint8_t *mac) {
+    PeerInfo *p = findByMac(mac);
+    if (p) p->lastDataOkMs = millis();
+}
+
 void PeerRegistry::tickTimeouts(uint32_t timeoutMs) {
     uint32_t now = millis();
     for (int i = 0; i < _count; i++) {
