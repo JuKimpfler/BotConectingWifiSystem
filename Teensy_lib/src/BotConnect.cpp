@@ -16,6 +16,8 @@ void BotConnect::begin(HardwareSerial &serial, uint8_t satId) {
     _rxIdx  = 0;
     _p2pHead = 0;
     _p2pCount = 0;
+    _lastCtrlMs  = 0;
+    _ctrlReceived = false;
 }
 
 // ─── Main loop ───────────────────────────────────────────────
@@ -40,6 +42,13 @@ void BotConnect::process() {
             }
         }
     }
+
+    // Update controlActive: true while a ctrl command was received within 500 ms
+    if (_ctrlReceived && (millis() - _lastCtrlMs < 500)) {
+        controlActive = true;
+    } else {
+        controlActive = false;
+    }
 }
 
 // ─── Line parser ─────────────────────────────────────────────
@@ -57,50 +66,51 @@ void BotConnect::_parseLine(const char *line) {
     // Control command: starts with 'V'
     // Format: V<speed>A<angle>SW<sw>BTN<btn>START<start>
     if (line[0] == 'V') {
-        int speed = 0, angle = 0, sw = 0, btn = 0, start = 0;
+        int sp = 0, ang = 0, sw = 0, btn = 0, st = 0;
         int parsed = sscanf(line, "V%dA%dSW%dBTN%dSTART%d",
-                            &speed, &angle, &sw, &btn, &start);
-        if (parsed == 5 && _onCtrl) {
-            _onCtrl((int16_t)speed, (int16_t)angle,
-                    (uint8_t)sw, (uint8_t)btn, (uint8_t)start);
+                            &sp, &ang, &sw, &btn, &st);
+        if (parsed == 5) {
+            speed    = (int16_t)sp;
+            angle    = (int16_t)ang;
+            switches = (uint8_t)sw;
+            buttons  = (uint8_t)btn;
+            start    = (uint8_t)st;
+            _lastCtrlMs  = millis();
+            _ctrlReceived = true;
         }
         return;
     }
 
-    // Mode command: M<n>
+    // Mode command: M<n>  (modes 1–5)
     if (line[0] == 'M' && line[1] >= '1' && line[1] <= '5') {
         uint8_t modeId = (uint8_t)(line[1] - '0');
-        if (_onMode) _onMode(modeId);
+        mode1 = (modeId == 1);
+        mode2 = (modeId == 2);
+        mode3 = (modeId == 3);
+        mode4 = (modeId == 4);
+        mode5 = (modeId == 5);
         return;
     }
 
     // Calibrate: CAL_*
     if (strncmp(line, "CAL_", 4) == 0) {
-        if (_onCal) _onCal(line);  // Pass full "CAL_IR_MAX" etc.
+        calIrMax   = (strcmp(line, CMD_CAL_IR_MAX)   == 0);
+        calIrMin   = (strcmp(line, CMD_CAL_IR_MIN)   == 0);
+        calLineMax = (strcmp(line, CMD_CAL_LINE_MAX)  == 0);
+        calLineMin = (strcmp(line, CMD_CAL_LINE_MIN)  == 0);
+        calBno     = (strcmp(line, CMD_CAL_BNO)       == 0);
         return;
     }
 
     // ACK responses: ACK<seq>:<status>
     // These are internal acknowledgements, typically not used by user code
     if (strncmp(line, "ACK", 3) == 0) {
-        // Could be handled in future if needed
         return;
     }
 
     // Everything else is treated as a P2P message from the peer robot
-    // This includes any custom messages that don't match the above patterns
     _enqueueP2P(line);
     if (_onP2P) _onP2P(line);
-    return;
-
-    // If we reach here and debug is enabled, log unknown command
-    if (_debugEnabled) {
-        char dbg[64];
-        snprintf(dbg, sizeof(dbg), "[BC] unhandled: %s", line);
-        // Can't use Serial inside lib without knowing which port
-        // Caller can log via custom handler if needed
-        (void)dbg;
-    }
 }
 
 // ─── Telemetry send helpers ───────────────────────────────────

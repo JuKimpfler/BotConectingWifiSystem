@@ -8,47 +8,58 @@
 // Serial1 is connected to the ESP satellite (TX=pin1, RX=pin0)
 // Adjust pins and baud as needed for your wiring
 
-void onMode(uint8_t modeId) {
-    Serial.printf("Mode selected: %d\n", modeId);
-    // Set your robot mode variable here
-}
-
-void onCalibrate(const char *calCmd) {
-    Serial.printf("Calibrate: %s\n", calCmd);
-    // Handle calibration command
-}
-
-void onControl(int16_t speed, int16_t angle,
-               uint8_t switches, uint8_t buttons, uint8_t start) {
-    Serial.printf("Ctrl: V=%d A=%d SW=0x%02X BTN=0x%02X START=%d\n",
-                  speed, angle, switches, buttons, start);
-    // Drive your motors here
-}
-
 void setup() {
     Serial.begin(115200);
     Serial1.begin(115200);
 
     // SAT_ID=1 means this Teensy is attached to ESP_Satellite with SAT_ID=1
     BC.begin(Serial1, 1);
-    BC.onMode(onMode);
-    BC.onCalibrate(onCalibrate);
-    BC.onControl(onControl);
-    BC.setDebugEnabled(true);
 
+    // Optional: register P2P callback for messages from the peer robot
+    BC.onP2P([](const char *msg) {
+        Serial.printf("P2P from peer: %s\n", msg);
+    });
+
+    BC.setDebugEnabled(true);
     Serial.println("BotConnect ready");
 }
 
 void loop() {
+    // Must be called every loop iteration to process incoming UART data
+    // and update the state variables.
     BC.process();
 
-    // Example: send telemetry every 50 ms
+    // ── Mode ─────────────────────────────────────────────────
+    // Exactly one modeX variable is true at a time (after first mode command).
+    if (BC.mode1) { /* autonomous mode */ }
+    if (BC.mode2) { /* remote control mode */ }
+    if (BC.mode3) { /* test mode */ }
+    if (BC.mode4) { /* mode 4 */ }
+    if (BC.mode5) { /* mode 5 */ }
+
+    // ── Calibration ──────────────────────────────────────────
+    // The last received calibration command's variable is true.
+    if (BC.calIrMax)   { /* run IR max calibration */ }
+    if (BC.calIrMin)   { /* run IR min calibration */ }
+    if (BC.calLineMax) { /* run line max calibration */ }
+    if (BC.calLineMin) { /* run line min calibration */ }
+    if (BC.calBno)     { /* run BNO sensor calibration */ }
+
+    // ── Control ───────────────────────────────────────────────
+    // controlActive is true while commands were received within the last 500 ms.
+    if (BC.controlActive) {
+        // Use the current control values to drive motors etc.
+        Serial.printf("Ctrl: V=%d A=%d SW=0x%02X BTN=0x%02X START=%d\n",
+                      BC.speed, BC.angle, BC.switches, BC.buttons, BC.start);
+    }
+
+    // ── Telemetry ─────────────────────────────────────────────
     static uint32_t lastTelem = 0;
     if (millis() - lastTelem >= 50) {
         lastTelem = millis();
         BC.sendTelemetryFloat("BallAngle", 12.5f);
         BC.sendTelemetryFloat("BallDist",  120.0f);
-        BC.sendTelemetryBool("Start",      true);
-        BC.sendTelemetryInt("Mode",        1);
+        BC.sendTelemetryBool("Start",      BC.start != 0);
+        BC.sendTelemetryBool("CtrlActive", BC.controlActive);
     }
 }

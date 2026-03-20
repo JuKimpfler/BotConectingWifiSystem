@@ -21,29 +21,50 @@
 #define TELEM_BOOL   2
 #define TELEM_STRING 3
 
-// ── Callback signatures ───────────────────────────────────────
-typedef void (*OnModeCb)(uint8_t modeId);
-typedef void (*OnCalibrateCb)(const char *calCmd);
-typedef void (*OnControlCb)(int16_t speed, int16_t angle,
-                            uint8_t switches, uint8_t buttons,
-                            uint8_t start);
+// ── P2P callback signature ────────────────────────────────────
 typedef void (*OnP2PCb)(const char *message);
 
 class BotConnect {
 public:
+    // ── State variables – updated by process() ───────────────
+    // Active mode: the last selected mode is true, all others false.
+    // All false until the first mode command is received.
+    bool mode1 = false;
+    bool mode2 = false;
+    bool mode3 = false;
+    bool mode4 = false;
+    bool mode5 = false;
+
+    // Active calibration: the last received calibration command is true,
+    // all others false. All false until the first calibration command is received.
+    bool calIrMax   = false;
+    bool calIrMin   = false;
+    bool calLineMax = false;
+    bool calLineMin = false;
+    bool calBno     = false;
+
+    // Control active: true while a control command was received within the
+    // last 500 ms, false otherwise.
+    bool controlActive = false;
+
+    // Last received control values (valid when controlActive is true).
+    int16_t speed    = 0;
+    int16_t angle    = 0;
+    uint8_t switches = 0;
+    uint8_t buttons  = 0;
+    uint8_t start    = 0;
+
     // ── Initialisation ─────────────────────────────────────────
     // serial: the HardwareSerial connected to the ESP satellite
     // satId:  1 or 2 – determines DBG prefix (DBG1: or DBG2:)
     void begin(HardwareSerial &serial, uint8_t satId = 1);
 
     // ── Main loop – must be called in loop() ──────────────────
+    // Updates state variables and manages the controlActive timeout.
     void process();
 
-    // ── Register command callbacks ────────────────────────────
-    void onMode(OnModeCb cb)         { _onMode = cb; }
-    void onCalibrate(OnCalibrateCb cb) { _onCal = cb; }
-    void onControl(OnControlCb cb)   { _onCtrl = cb; }
-    void onP2P(OnP2PCb cb)           { _onP2P = cb; }
+    // ── P2P callback (optional) ───────────────────────────────
+    void onP2P(OnP2PCb cb) { _onP2P = cb; }
 
     // ── Telemetry helpers ─────────────────────────────────────
     // Send a named integer stream value
@@ -87,10 +108,11 @@ private:
     uint8_t _p2pHead = 0;
     uint8_t _p2pCount = 0;
 
-    OnModeCb      _onMode = nullptr;
-    OnCalibrateCb _onCal  = nullptr;
-    OnControlCb   _onCtrl = nullptr;
-    OnP2PCb       _onP2P  = nullptr;
+    // Timestamp of the last received control command (ms)
+    uint32_t _lastCtrlMs = 0;
+    bool     _ctrlReceived = false;  // guard: ignore millis() wrap at startup
+
+    OnP2PCb _onP2P = nullptr;
 
     void _parseLine(const char *line);
     void _sendLine(const char *line);
