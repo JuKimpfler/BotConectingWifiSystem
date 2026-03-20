@@ -59,9 +59,11 @@ Das bedeutet:
 ### 4.1 Anschlussprinzip (integrierter XIAO-Lader)
 
 1. Nutze den **STAT/CHG-Status des integrierten Lade-ICs auf dem XIAO ESP32-C3** (kein externer Lader erforderlich).
-2. Falls dieses Signal auf deiner Revision als Pad/Pin verfügbar ist: **STAT/CHG mit D7** verbinden.
+2. Prüfe im offiziellen XIAO-ESP32-C3-Pinout deiner Board-Revision, ob ein **STAT/CHG-Pad** herausgeführt ist. Nur dann: **STAT/CHG mit D7** verbinden.
 3. Da es derselbe XIAO ist, ist **GND bereits gemeinsam** (kein separates Lade-Board nötig).
 4. Kein externer Pull-up nötig: D7 läuft in der Firmware mit `INPUT_PULLUP`.
+
+Wenn deine Revision **kein zugängliches STAT/CHG-Pad** hat, bleibt die Verbindung zu D7 ungenutzt; die restliche Batterie-Logik (A1/Low-Battery) funktioniert weiterhin.
 
 ### 4.2 Warum das so funktioniert
 
