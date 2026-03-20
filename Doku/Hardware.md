@@ -56,16 +56,16 @@ Das bedeutet:
 - **LOW an D7 → „lädt“**
 - **HIGH an D7 → „lädt nicht“**
 
-### 4.1 Anschlussprinzip
+### 4.1 Anschlussprinzip (integrierter XIAO-Lader)
 
-1. Verwende am Lade-IC den **STAT**-Ausgang (Open-Drain/Open-Collector typisch).
-2. Verbinde **STAT direkt mit D7** am Hub.
-3. Verbinde **Masse (GND) des Lade-Boards mit GND des Hub**.
-4. Keinen externen Pull-up nötig (intern bereits aktiv), optional ist ein externer Pull-up auf 3.3V möglich, wenn das Lade-Board das verlangt.
+1. Nutze den **STAT/CHG-Status des integrierten Lade-ICs auf dem XIAO ESP32-C3** (kein externer Lader erforderlich).
+2. Falls dieses Signal auf deiner Revision als Pad/Pin verfügbar ist: **STAT/CHG mit D7** verbinden.
+3. Da es derselbe XIAO ist, ist **GND bereits gemeinsam** (kein separates Lade-Board nötig).
+4. Kein externer Pull-up nötig: D7 läuft in der Firmware mit `INPUT_PULLUP`.
 
 ### 4.2 Warum das so funktioniert
 
-Viele Li-Ion-Lader ziehen STAT bei aktivem Laden nach GND. Genau dieses Verhalten erwartet die Firmware durch `INPUT_PULLUP` + LOW-Abfrage.
+Der integrierte XIAO-Lader meldet den Ladezustand typischerweise über ein active-low Statussignal. Genau dieses Verhalten erwartet die Firmware durch `INPUT_PULLUP` + LOW-Abfrage.
 
 ### 4.3 Pegel-/Sicherheitsregeln
 
