@@ -52,6 +52,11 @@ static bool     g_hubOnline  = false;
 static uint32_t g_lastP2pSend = 0;
 static uint32_t g_lastPeerDiscovery = 0;
 static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static uint32_t g_lastP2pLedBlink = 0;
+static uint32_t g_lastP2pDataFlow = 0;
+static bool     g_p2pLedBlinkState = false;
+
+static void markP2pDataFlow();
 
 // ─── USB serial command handler ──────────────────────────────
 static char s_serialCmdBuf[64];
@@ -233,6 +238,9 @@ static bool forwardUartRawToPeer(const char *line) {
     memcpy(frame.payload + frame.len, &crc, 2);
 
     bool ok = EspNowBridge::instance().send(g_peerMac, &frame);
+    if (ok) {
+        markP2pDataFlow();
+    }
     if (g_monitorMode == MONITOR_BRIDGE) {
         USB_DEBUG_PRINTF("[SAT%d] UART raw -> peer %s\n", SAT_ID, ok ? "ok" : "fail");
     }
@@ -245,6 +253,28 @@ static bool routePayloadLine(const char *line, const char *srcLabel) {
         return forwardTelemetryLine(line, srcLabel);
     }
     return forwardUartRawToPeer(line);
+}
+
+static void markP2pDataFlow() {
+    g_lastP2pDataFlow = millis();
+}
+
+static void updateStatusLeds(uint32_t now) {
+    // WBS connected LED (D10): on when hub is online
+    digitalWrite(PIN_LED_WBS_CONNECTED, g_hubOnline ? HIGH : LOW);
+
+    // P2P connected LED (D9):
+    // - blink when peer is known/connected
+    // - solid on while data is flowing recently
+    if ((now - g_lastP2pLedBlink) >= P2P_LED_BLINK_MS) {
+        g_lastP2pLedBlink = now;
+        g_p2pLedBlinkState = !g_p2pLedBlinkState;
+    }
+
+    bool p2pConnected = g_peerKnown;
+    bool p2pDataActive = (now - g_lastP2pDataFlow) <= P2P_LED_DATA_HOLD_MS;
+    bool p2pLedOn = p2pDataActive ? true : (p2pConnected ? g_p2pLedBlinkState : false);
+    digitalWrite(PIN_LED_P2P_CONNECTED, p2pLedOn ? HIGH : LOW);
 }
 
 static void handleSerialCmd(const char *cmd) {
@@ -454,6 +484,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         // Output without any prefix so the Teensy sees it as if it came directly
         // from the other robot.
         if (frame->len > 0 && frame->len <= FRAME_MAX_PAYLOAD) {
+            markP2pDataFlow();
             char rawBuf[FRAME_MAX_PAYLOAD + 2];
             memcpy(rawBuf, frame->payload, frame->len);
             rawBuf[frame->len] = '\n';
@@ -540,6 +571,11 @@ void setup() {
 
     loadConfig();
 
+    pinMode(PIN_LED_WBS_CONNECTED, OUTPUT);
+    pinMode(PIN_LED_P2P_CONNECTED, OUTPUT);
+    digitalWrite(PIN_LED_WBS_CONNECTED, LOW);
+    digitalWrite(PIN_LED_P2P_CONNECTED, LOW);
+
 #ifdef UART_BRIDGE_USB
     USB_DEBUG_PRINTF("[SAT%d] *** UART_BRIDGE_USB active – HW UART pins disabled ***\n", SAT_ID);
     USB_DEBUG_PRINTF("[SAT%d]   UART payload traffic is routed via USB only.\n", SAT_ID);
@@ -619,6 +655,8 @@ void loop() {
             USB_DEBUG_PRINTF("[SAT%d] Hub offline – P2P bridge still active\n", SAT_ID);
         }
     }
+
+    updateStatusLeds(now);
 
     // ── Discover peer satellite when unknown ──────────────────
     if (!g_peerKnown && (now - g_lastPeerDiscovery) >= 1000) {

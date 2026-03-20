@@ -94,6 +94,8 @@ Referenz: `ESP_Satellite/include/sat_config.h`
 |---|---|---|
 | TX | D6 / GPIO21 | RX1 / Pin 0 |
 | RX | D7 / GPIO20 | TX1 / Pin 1 |
+| WBS-Connected LED | D10 / GPIO10 | — |
+| P2P-Connected LED | D9 / GPIO9 | — |
 | GND | GND | GND |
 
 Wichtig: TX/RX gekreuzt verbinden.

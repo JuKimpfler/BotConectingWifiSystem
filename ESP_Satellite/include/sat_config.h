@@ -14,7 +14,9 @@
 #endif
 
 // ── Hardware ─────────────────────────────────────────────────
-#define PIN_LED_STATUS       10   // Seeed XIAO onboard LED
+#define PIN_LED_WBS_CONNECTED 10  // WBS connected LED
+#define PIN_LED_P2P_CONNECTED 9   // P2P connected LED
+#define PIN_LED_STATUS       PIN_LED_WBS_CONNECTED
 #define HW_UART_RX_PIN       20   // D7 on XIAO ESP32-C3
 #define HW_UART_TX_PIN       21   // D6 on XIAO ESP32-C3
 #define HW_UART_BAUD         115200
@@ -28,6 +30,8 @@
 #define HUB_INTERVAL_MS      100  // Hub command poll interval
 #define HEARTBEAT_INTERVAL_MS 1000
 #define HEARTBEAT_TIMEOUT_MS  4000
+#define P2P_LED_BLINK_MS      500
+#define P2P_LED_DATA_HOLD_MS  400
 #define ACK_TIMEOUT_MS        500
 #define ACK_MAX_RETRIES       3
 
