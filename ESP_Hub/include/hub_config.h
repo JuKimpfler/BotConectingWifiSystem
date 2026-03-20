@@ -2,23 +2,75 @@
 // ============================================================
 //  ESP_Hub/include/hub_config.h
 //  Compile-time defaults and tuneable constants for the Hub
+//
+//  Target selection (set via build_flags in platformio.ini):
+//    -DBCWS_TARGET_C6  →  ESP32-C6 (e.g. Seeed XIAO ESP32-C6)
+//    (default)         →  ESP32-C3 (e.g. Seeed XIAO ESP32-C3)
+//
+//  Quick switch example in platformio.ini:
+//    build_flags = ... -DBCWS_TARGET_C6
 // ============================================================
 
 #include <Arduino.h>
 
-// ── Hardware ─────────────────────────────────────────────────
-#define PIN_LED_STATUS       10   // Seeed XIAO ESP32-C3 onboard LED
+// ── Target auto-detection / explicit override ─────────────────
+// Prefer the explicit flag; fall back to IDF target macros so
+// firmware compiled with the correct board SDK automatically
+// picks the right settings without manual flag changes.
+#if defined(BCWS_TARGET_C6)
+  // Explicit C6 override – takes priority
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+  #define BCWS_TARGET_C6
+#else
+  #define BCWS_TARGET_C3
+#endif
+
+#if defined(BCWS_TARGET_C6)
+  #define BCWS_TARGET_NAME  "ESP32-C6"
+#else
+  #define BCWS_TARGET_NAME  "ESP32-C3"
+#endif
+
+// ── Target-specific hardware pins ────────────────────────────
+// External LEDs/buttons use the same silkscreen labels (D2-D7, A1)
+// on both XIAO boards – the Arduino BSP maps them to the correct
+// GPIO numbers per chip.  Only the onboard status-LED differs.
+#if defined(BCWS_TARGET_C6)
+  // Seeed XIAO ESP32-C6: onboard LED is on GPIO15 (LED_BUILTIN = 15)
+  #define PIN_LED_STATUS       15
+
+  // Battery: same external 2:1 voltage divider on A1.
+  // ESP32-C6 ADC uses eFuse two-point calibration automatically via
+  // analogReadMilliVolts(), giving ~±5 mV accuracy vs ~±30 mV on C3.
+  #define PIN_BATTERY_SENSE    A1
+  // Calibration hint: C6 eFuse cal is applied transparently by the SDK.
+  // Scaling factor and low-threshold remain identical to the C3 setup.
+  #define BATTERY_ADC_NOTE     "ESP32-C6: eFuse two-point ADC calibration active"
+#else
+  // Seeed XIAO ESP32-C3: onboard LED is on GPIO10 (LED_BUILTIN = 10)
+  #define PIN_LED_STATUS       10
+
+  // Battery: external 2:1 voltage divider on A1; basic ADC calibration.
+  #define PIN_BATTERY_SENSE    A1
+  #define BATTERY_ADC_NOTE     "ESP32-C3: basic ADC calibration (attenuation linearisation)"
+#endif
+
+// ── Common hardware pins (same silkscreen on C3 and C6) ───────
 #define PIN_LED_POWER        PIN_LED_STATUS
 #define PIN_LED_BAT_LOW      D2   // External LED: steady=low battery, blink=charging
 #define PIN_LED_WEBSERVER    D3
 #define PIN_LED_SAT1         D4
 #define PIN_LED_SAT2         D5
 #define PIN_BTN_RESET        D6   // Active-low reset button to GND
-#define PIN_CHARGE_STATUS    D7   // Optional: charger STAT (active low)
-#define PIN_BATTERY_SENSE    A1   // Analog battery divider input
+#define PIN_CHARGE_STATUS    D7   // Optional: charger STAT pin (active low)
+                                  // C3: D7=GPIO20, C6: D7=GPIO22 (mapped by BSP)
 
-#define BATTERY_VDIVIDER           2.0f   // Voltage divider factor (e.g. 100k/100k -> 2.0)
-#define BATTERY_LOW_MV             3600   // LED on when battery below this (mV)
+// ── Battery measurement parameters ───────────────────────────
+// External voltage divider: R_top = R_bot = 100 kΩ → factor 2.0
+// Ensure A1 sees at most 3.3 V (i.e. battery ≤ 6.6 V with 2:1 divider).
+// Recalibrate BATTERY_VDIVIDER if you use different resistor values.
+#define BATTERY_VDIVIDER           2.0f   // Voltage divider factor (100k/100k → 2.0)
+#define BATTERY_LOW_MV             3600   // mV: battery-low LED threshold
 #define BATTERY_SAMPLE_INTERVAL_MS 5000
 #define BATTERY_CHARGE_BLINK_MS     500
 

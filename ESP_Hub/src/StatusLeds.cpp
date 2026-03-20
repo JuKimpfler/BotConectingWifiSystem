@@ -15,6 +15,9 @@ void BatteryMonitor::begin() {
 #if PIN_BATTERY_SENSE >= 0
     pinMode(PIN_BATTERY_SENSE, INPUT);
     analogReadResolution(12);
+    // ADC_11db (≈0–3.3 V input range) is used on both C3 and C6.
+    // On ESP32-C6 the SDK automatically applies eFuse two-point calibration
+    // inside analogReadMilliVolts(), so no extra calibration call is needed.
     analogSetAttenuation(ADC_11db);
 #endif
 #if PIN_CHARGE_STATUS >= 0
@@ -35,6 +38,10 @@ void BatteryMonitor::tick() {
     next.charging = false;
 
 #if PIN_BATTERY_SENSE >= 0
+    // analogReadMilliVolts() uses the best available ADC calibration for the
+    // current chip.  On ESP32-C6 this is eFuse two-point calibration; on
+    // ESP32-C3 it is attenuation-based linearisation.
+    // Multiply by BATTERY_VDIVIDER to reverse the external resistor divider.
     uint32_t rawMv = analogReadMilliVolts(PIN_BATTERY_SENSE);
     if (rawMv > 0) {
         float scaledMv = rawMv * BATTERY_VDIVIDER;
@@ -49,6 +56,11 @@ void BatteryMonitor::tick() {
 #endif
 
     _state = next;
+}
+
+uint32_t BatteryMonitor::getBatteryVoltageMv() const {
+    if (!_state.valid) return 0;
+    return static_cast<uint32_t>(_state.voltage / MV_TO_V + 0.5f);
 }
 
 void StatusLeds::begin() {

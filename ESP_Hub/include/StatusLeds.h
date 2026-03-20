@@ -20,6 +20,11 @@ public:
     void tick();
     const BatteryState &state() const { return _state; }
 
+    /// Returns the scaled battery voltage in millivolts, or 0 if not yet valid.
+    /// On ESP32-C6 the underlying ADC read uses eFuse two-point calibration
+    /// automatically (via analogReadMilliVolts), giving higher accuracy than C3.
+    uint32_t getBatteryVoltageMv() const;
+
 private:
     BatteryState _state = {};
     uint32_t     _lastSampleMs = 0;

@@ -5,7 +5,7 @@ Diese Dokumentation wurde neu strukturiert und ist auf den aktuellen Code-Stand 
 ## Was ist das System?
 
 Ein 3‑Knoten‑System mit:
-- **Hub (ESP32‑C3)**: stellt WLAN + Weboberfläche bereit, routet Befehle
+- **Hub (ESP32-C3 oder ESP32-C6)**: stellt WLAN + Weboberfläche bereit, routet Befehle
 - **SAT1 + SAT2 (ESP32‑C3)**: UART‑Brücke zu je einem Teensy + direkte P2P‑Kommunikation
 - **2× Teensy 4.0**: eigentliche Roboterlogik (Motoren/Sensorik)
 
