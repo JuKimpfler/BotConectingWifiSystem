@@ -1,6 +1,6 @@
 # BotConnectingWifiSystem
 
-Kurzfassung: Dieses Projekt verbindet **2 Roboter (Teensy 4.0)** drahtlos über **2 ESP32‑C3 Satelliten** mit einem **ESP32‑C3 Hub** inkl. Weboberfläche.
+Kurzfassung: Dieses Projekt verbindet **2 Roboter (Teensy 4.0)** drahtlos über **2 ESP32‑C3 Satelliten** mit einem **ESP32‑C3 oder ESP32‑C6 Hub** inkl. Weboberfläche.
 
 ```text
 Browser (WebSocket)
@@ -28,8 +28,13 @@ ESP #3 HUB (WiFi AP + UI)
 2. **Hub flashen (ESP #3)**
    ```bash
    cd ../
-   pio run -e esp_hub -t upload
-   pio run -e esp_hub -t uploadfs
+   # ESP32-C3 (Standard)
+   pio run -e esp_hub    -t upload
+   pio run -e esp_hub    -t uploadfs
+
+   # ESP32-C6
+   pio run -e esp_hub_c6 -t upload
+   pio run -e esp_hub_c6 -t uploadfs
    ```
 
 3. **Satelliten flashen (ESP #1 / #2)**
