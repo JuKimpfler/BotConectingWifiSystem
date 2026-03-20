@@ -56,7 +56,9 @@ static uint32_t g_lastP2pLedBlink = 0;
 static uint32_t g_lastP2pDataFlow = 0;
 static bool     g_p2pLedBlinkState = false;
 
-static void markP2pDataFlow();
+static void markP2pDataFlow() {
+    g_lastP2pDataFlow = millis();
+}
 
 // ─── USB serial command handler ──────────────────────────────
 static char s_serialCmdBuf[64];
@@ -255,10 +257,6 @@ static bool routePayloadLine(const char *line, const char *srcLabel) {
     return forwardUartRawToPeer(line);
 }
 
-static void markP2pDataFlow() {
-    g_lastP2pDataFlow = millis();
-}
-
 static void updateStatusLeds(uint32_t now) {
     // WBS connected LED (D10): on when hub is online
     digitalWrite(PIN_LED_WBS_CONNECTED, g_hubOnline ? HIGH : LOW);
@@ -266,14 +264,19 @@ static void updateStatusLeds(uint32_t now) {
     // P2P connected LED (D9):
     // - blink when peer is known/connected
     // - solid on while data is flowing recently
-    if ((now - g_lastP2pLedBlink) >= P2P_LED_BLINK_MS) {
+    if ((uint32_t)(now - g_lastP2pLedBlink) >= P2P_LED_BLINK_MS) {
         g_lastP2pLedBlink = now;
         g_p2pLedBlinkState = !g_p2pLedBlinkState;
     }
 
     bool p2pConnected = g_peerKnown;
-    bool p2pDataActive = (now - g_lastP2pDataFlow) <= P2P_LED_DATA_HOLD_MS;
-    bool p2pLedOn = p2pDataActive ? true : (p2pConnected ? g_p2pLedBlinkState : false);
+    bool p2pDataActive = (uint32_t)(now - g_lastP2pDataFlow) <= P2P_LED_DATA_HOLD_MS;
+    bool p2pLedOn = false;
+    if (p2pDataActive) {
+        p2pLedOn = true;
+    } else if (p2pConnected) {
+        p2pLedOn = g_p2pLedBlinkState;
+    }
     digitalWrite(PIN_LED_P2P_CONNECTED, p2pLedOn ? HIGH : LOW);
 }
 
