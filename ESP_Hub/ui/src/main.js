@@ -454,11 +454,20 @@ document.getElementById('inp-speed').addEventListener('change', () => {
 })
 
 // ── Action buttons ─────────────────────────────────────────────
+// Send button-pressed on mousedown/touchstart and button-released
+// (btn: 0) on mouseup/touchend so every state change triggers a message.
 document.querySelectorAll('.btn-action').forEach(btn => {
-  btn.addEventListener('click', () => {
+  const _press = () => {
     const b = 1 << (parseInt(btn.dataset.btn, 10) - 1)
     _sendCtrl({ btn: b }, true)
-  })
+  }
+  const _release = () => {
+    _sendCtrl({ btn: 0 }, true)
+  }
+  btn.addEventListener('mousedown', _press)
+  btn.addEventListener('touchstart', _press, { passive: true })
+  btn.addEventListener('mouseup', _release)
+  btn.addEventListener('touchend', _release)
 })
 
 // ── Start toggle ──────────────────────────────────────────────
