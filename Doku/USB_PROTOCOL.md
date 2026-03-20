@@ -1,60 +1,57 @@
-# USB Communication (Satellite)
+# USB-Protokoll (Satellite)
 
-Dieses Dokument beschreibt die USB-Seriell-Kommunikation am ESP-Satellite.
+Diese Datei beschreibt die USB-Seriell-Schnittstelle der Satellite-Firmware.
 
-## 1) USB Service-Kommandos
+## 1. Service-Kommandos
 
-Über den USB-Serial-Monitor können folgende Wartungs-Kommandos gesendet werden:
+Über den USB-Monitor am Satellite verfügbar:
 
-- `mac` oder `info`
-  - Zeigt eigene MAC, Kanal, bekannte Hub/Peer-MAC und Hub-Online-Status.
+- `mac` / `info`
+  - zeigt eigene MAC, Channel, bekannte Hub-/Peer-MAC, Hub-Online-Status
 - `debug`
-  - Zeigt erweiterten Status (Uptime, ACK-Queue, bekannte Peers).
+  - erweiterter Status (Uptime, ACK-Queue, Peer-Status)
 - `clearmac`
-  - Löscht gespeicherte Hub-/Peer-MACs aus NVS.
+  - löscht gespeicherte Hub-/Peer-MACs in NVS
 - `help`
-  - Zeigt verfügbare USB-Kommandos.
+  - zeigt Kommandoliste
+- `Modi+Web`, `Modi+Bridge`, `Modi+Status`
+  - schaltet Monitoring-Modi (siehe Ausgabe im Monitor)
 
-## 2) USB Telemetrie-Injection (Weiterleitung wie UART)
+Referenz: `ESP_Satellite/src/main.cpp` (`handleSerialCmd`)
 
-Zusätzlich akzeptiert der Satellite Telemetriezeilen über USB im selben Format wie bei
-UART-Eingang vom Teensy:
+---
 
-- `DBG:<name>=<value>` (für SAT1 und SAT2 gleichermaßen)
+## 2. USB Telemetrie-Injection
+
+Gültiges Prefix:
+- `DBG:<name>=<value>`
 
 Beispiele:
-
 - `DBG:Speed=120`
 - `DBG:Angle=45.5`
 
-Wenn eine solche Zeile über USB empfangen wird, verarbeitet der Satellite sie **wie eine
-normale Hardware-UART-Zeile mit DBG-Prefix**:
+Diese Zeilen werden intern wie UART-DBG behandelt und als `MSG_DBG` zum Hub gesendet.
 
-1. Parse in `MSG_DBG` Frame
-2. Versand an den Hub (falls bekannt)
+---
 
-> **Hinweis:** Das frühere Format `DBG1:<name>=<value>` / `DBG2:<name>=<value>` ist nicht
-> mehr gültig. Nur noch `DBG:` wird als Debug/Telemetrie-Prefix erkannt.
+## 3. Transparente Bridge
 
-## 3) Transparente UART-Bridge (SAT1 ↔ SAT2)
+Zeilen **ohne** `DBG:` werden als Nutzdaten betrachtet und als `MSG_UART_RAW` zum Peer-Satellite übertragen.
 
-UART-Zeilen vom Teensy, die **kein** `DBG:`-Prefix haben, werden nicht als Telemetrie
-behandelt, sondern als Nutzdaten über die P2P ESP-NOW-Verbindung an den anderen Satellite
-weitergeleitet:
+Das Ziel-Satellite gibt die Daten auf seiner Teensy-UART wieder aus.
 
-- SAT1 empfängt UART-Zeile ohne `DBG:` → sendet als `MSG_UART_RAW` an SAT2
-- SAT2 gibt die empfangenen Daten **ohne zusätzlichen Prefix** wieder per UART zum Teensy aus
+---
 
-Diese transparente Bridge funktioniert in beide Richtungen (SAT1 → SAT2 und SAT2 → SAT1).
+## 4. Routing-Übersicht
 
-## 4) Routing-Übersicht
+| Quelle | Inhalt | Weiterleitung |
+|---|---|---|
+| USB/UART | `DBG:`-Zeile | Hub (`MSG_DBG`) |
+| USB/UART | ohne Prefix | Peer-SAT (`MSG_UART_RAW`) |
+| Hub | CTRL/MODE/CAL | lokale Teensy-UART |
 
-| Quelle          | Prefix         | Ziel                          | Ausgabe am Empfänger       |
-|-----------------|----------------|-------------------------------|----------------------------|
-| Teensy → SAT    | `DBG:`         | Hub (als `MSG_DBG`)           | (Hub-Webinterface/Telemetrie) |
-| Teensy → SAT    | kein Prefix    | Peer-SAT (als `MSG_UART_RAW`) | Teensy UART, ohne Prefix   |
-| Hub → SAT       | –              | Teensy UART                   | Mit Format-Prefix (z.B. `V..A..`, `M1`, `CAL_IR_MAX`) |
+---
 
-> Befehle vom Hub (MSG_CTRL, MSG_MODE, MSG_CAL) werden immer mit einem lesbaren Prefix
-> auf der Teensy-UART ausgegeben, damit klar erkennbar ist, dass sie vom Hub stammen
-> (und nicht vom Peer-Satellite).
+## 5. Hinweis zu `DBG1:` / `DBG2:`
+
+In der aktuellen Firmware gilt primär `DBG:` als gemeinsames Prefix für Telemetrie-Routing.
