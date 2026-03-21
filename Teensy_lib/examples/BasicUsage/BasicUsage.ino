@@ -5,15 +5,15 @@
 
 #include "BotConnect.h"
 
-// Serial1 is connected to the ESP satellite (TX=pin1, RX=pin0)
+// Serial3 is connected to the ESP satellite (TX=pin1, RX=pin0)
 // Adjust pins and baud as needed for your wiring
 
 void setup() {
     Serial.begin(115200);
-    Serial1.begin(115200);
+    Serial3.begin(115200);
 
     // SAT_ID=1 means this Teensy is attached to ESP_Satellite with SAT_ID=1
-    BC.begin(Serial1, 1);
+    BC.begin(Serial3, 1);
 
     // Optional: register P2P callback for messages from the peer robot
     BC.onP2P([](const char *msg) {
