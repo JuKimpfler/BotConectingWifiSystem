@@ -146,6 +146,13 @@ void BotConnect::sendTelemetryString(const char *name, const char *value) {
     _sendLine(buf);
 }
 
+void BotConnect::LedUpdate() {
+    sendTelemetryBool("Led1", led1);
+    sendTelemetryBool("Led2", led2);
+    sendTelemetryBool("Led3", led3);
+    sendTelemetryBool("Led4", led4);
+}
+
 void BotConnect::sendAck(uint8_t seq, uint8_t status) {
     if (!_serial) return;
     char buf[32];

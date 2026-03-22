@@ -22,10 +22,19 @@ const JOYSTICK_SEND_MS = 50
 // Telemetry stream map: name -> { current, min, max }
 let telemFilter = '1'
 const streams = new Map()
+const plotSelection = new Map() // key -> enabled (default false)
+const plotSeries = new Map()    // key -> number[]
+const MAX_PLOT_POINTS = 200
+const LED_STREAM_REGEX = /^led([1-4])$/i
+const ledStateByRole = {
+  1: [false, false, false, false],
+  2: [false, false, false, false],
+}
 const MODE_CHANNELS = 5
 const CAL_CHANNELS = 5
 let modeLabels = Array.from({ length: MODE_CHANNELS }, (_, i) => `Mode ${i + 1}`)
 let calLabels = Array.from({ length: CAL_CHANNELS }, (_, i) => `Calib ${i + 1}`)
+let _plotDrawScheduled = false
 
 function _renderModeCalLabels() {
   document.querySelectorAll('.btn-mode').forEach(btn => {
@@ -70,8 +79,14 @@ const sat1Badge  = document.getElementById('badge-sat1')
 const sat2Badge  = document.getElementById('badge-sat2')
 const telemBody  = document.getElementById('telem-body')
 const telemFilterBtns = document.querySelectorAll('.btn-telem-filter')
-const rawMonitor = document.getElementById('raw-monitor')
-const monitorPause = document.getElementById('monitor-pause')
+const plotCanvas = document.getElementById('telem-plot')
+const plotLegend = document.getElementById('plot-legend')
+const ledElems = [
+  document.getElementById('dbg-led-1'),
+  document.getElementById('dbg-led-2'),
+  document.getElementById('dbg-led-3'),
+  document.getElementById('dbg-led-4'),
+]
 const modeFeedback = document.getElementById('mode-feedback')
 const calFeedback  = document.getElementById('cal-feedback')
 const settingsFeedback = document.getElementById('settings-feedback')
@@ -96,6 +111,8 @@ telemFilterBtns.forEach(btn => {
     btn.classList.add('active')
     telemFilter = btn.dataset.filter || 'both'
     _renderTelemetry()
+    _updateLedIndicators()
+    _schedulePlotDraw()
   })
 })
 
@@ -114,7 +131,11 @@ wsOn('ws_close', () => {
   sat2Badge.className = 'badge offline'
   // Clear stale telemetry so the table shows fresh data after reconnect
   streams.clear()
+  plotSeries.clear()
+  plotSelection.clear()
   telemBody.innerHTML = ''
+  _updateLedIndicators()
+  _schedulePlotDraw()
 })
 
 // ── Peer status ────────────────────────────────────────────────
@@ -218,6 +239,9 @@ wsOn('telemetry', (msg) => {
     if (!s.name) return
     const role = parseInt(s.role, 10) || 0
     const key = `${role}:${s.name}`
+    const numCurrent = Number(s.current)
+
+    if (!plotSelection.has(key)) plotSelection.set(key, false)
     streams.set(key, {
       name: s.name,
       role,
@@ -225,13 +249,30 @@ wsOn('telemetry', (msg) => {
       min: s.min,
       max: s.max,
     })
+
+    const ledMatch = s.name.match(LED_STREAM_REGEX)
+    if (ledMatch && (role === 1 || role === 2)) {
+      const ledIdx = parseInt(ledMatch[1], 10) - 1
+      ledStateByRole[role][ledIdx] = numCurrent >= 0.5
+    }
+
+    if (Number.isFinite(numCurrent)) {
+      let points = plotSeries.get(key)
+      if (!points) {
+        points = []
+        plotSeries.set(key, points)
+      }
+      points.push(numCurrent)
+      if (points.length > MAX_PLOT_POINTS) points.splice(0, points.length - MAX_PLOT_POINTS)
+    }
   })
   _renderTelemetry()
+  _updateLedIndicators()
+  _schedulePlotDraw()
 })
 
 function _renderTelemetry() {
   const fmt = n => (typeof n === 'number' ? n.toFixed(3) : n)
-  const rows = []
   const selectedRole = telemFilter === 'both' ? null : parseInt(telemFilter, 10)
   const sorted = Array.from(streams.values())
     .filter(s => selectedRole == null || s.role === selectedRole)
@@ -242,35 +283,192 @@ function _renderTelemetry() {
       return a.name.localeCompare(b.name)
     })
 
+  const frag = document.createDocumentFragment()
   sorted.forEach(s => {
     const roleLabel = s.role ? `SAT${s.role}` : 'SAT'
-    rows.push(`<tr class="telem-row role-${s.role || 0}">
-      <td class="role-chip role-${s.role || 0}">${roleLabel}</td>
-      <td>${s.name}</td>
-      <td class="value-current">${fmt(s.current)}</td>
-      <td class="value-dim">${fmt(s.min)}</td>
-      <td class="value-dim">${fmt(s.max)}</td>
-    </tr>`)
+    const key = `${s.role}:${s.name}`
+    const checked = plotSelection.get(key) === true
+    const row = document.createElement('tr')
+    row.className = `telem-row role-${s.role || 0}`
+
+    const roleTd = document.createElement('td')
+    roleTd.className = `role-chip role-${s.role || 0}`
+    roleTd.textContent = roleLabel
+    row.appendChild(roleTd)
+
+    const nameTd = document.createElement('td')
+    nameTd.textContent = s.name
+    row.appendChild(nameTd)
+
+    const curTd = document.createElement('td')
+    curTd.className = 'value-current'
+    curTd.textContent = String(fmt(s.current))
+    row.appendChild(curTd)
+
+    const minTd = document.createElement('td')
+    minTd.className = 'value-dim'
+    minTd.textContent = String(fmt(s.min))
+    row.appendChild(minTd)
+
+    const maxTd = document.createElement('td')
+    maxTd.className = 'value-dim'
+    maxTd.textContent = String(fmt(s.max))
+    row.appendChild(maxTd)
+
+    const plotTd = document.createElement('td')
+    const chk = document.createElement('input')
+    chk.type = 'checkbox'
+    chk.className = 'plot-toggle'
+    chk.dataset.streamKey = key
+    chk.checked = checked
+    plotTd.appendChild(chk)
+    row.appendChild(plotTd)
+
+    frag.appendChild(row)
   })
-  telemBody.innerHTML = rows.join('')
+  telemBody.replaceChildren(frag)
 }
 
-// ── Raw monitor ────────────────────────────────────────────────
-wsOn('raw', (data) => {
-  if (monitorPause.checked) return
-  const line = document.createElement('div')
-  line.textContent = data
-  rawMonitor.appendChild(line)
-  // Keep at most 200 lines
-  while (rawMonitor.children.length > 200) {
-    rawMonitor.removeChild(rawMonitor.firstChild)
-  }
-  rawMonitor.scrollTop = rawMonitor.scrollHeight
+telemBody.addEventListener('change', (evt) => {
+  const target = evt.target
+  if (!(target instanceof HTMLInputElement)) return
+  if (!target.classList.contains('plot-toggle')) return
+  const key = target.dataset.streamKey
+  if (!key) return
+  plotSelection.set(key, target.checked)
+  _schedulePlotDraw()
 })
 
-document.getElementById('monitor-clear').addEventListener('click', () => {
-  rawMonitor.innerHTML = ''
-})
+function _getLedDisplayRole() {
+  if (telemFilter === '1' || telemFilter === '2') return parseInt(telemFilter, 10)
+  return targetRole === 2 ? 2 : 1
+}
+
+function _updateLedIndicators() {
+  const role = _getLedDisplayRole()
+  const states = ledStateByRole[role] || [false, false, false, false]
+  ledElems.forEach((el, i) => {
+    if (!el) return
+    el.classList.toggle('on', !!states[i])
+  })
+}
+
+function _colorForSeriesKey(key) {
+  let hash = 0
+  for (let i = 0; i < key.length; i++) hash = ((hash << 5) - hash) + key.charCodeAt(i)
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue} 85% 58%)`
+}
+
+function _schedulePlotDraw() {
+  if (_plotDrawScheduled || !plotCanvas) return
+  _plotDrawScheduled = true
+  requestAnimationFrame(() => {
+    _plotDrawScheduled = false
+    _drawPlot()
+  })
+}
+
+function _drawPlot() {
+  if (!plotCanvas) return
+  const ctx = plotCanvas.getContext('2d')
+  if (!ctx) return
+
+  const width = plotCanvas.clientWidth || plotCanvas.width
+  const height = plotCanvas.clientHeight || plotCanvas.height
+  if (plotCanvas.width !== width) plotCanvas.width = width
+  if (plotCanvas.height !== height) plotCanvas.height = height
+
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = '#080a0b'
+  ctx.fillRect(0, 0, width, height)
+
+  const selectedRole = telemFilter === 'both' ? null : parseInt(telemFilter, 10)
+  const visibleKeys = []
+  plotSelection.forEach((enabled, key) => {
+    if (!enabled) return
+    const role = parseInt((key.split(':')[0] || '0'), 10)
+    if (selectedRole != null && role !== selectedRole) return
+    const points = plotSeries.get(key)
+    if (!points || points.length < 2) return
+    visibleKeys.push(key)
+  })
+
+  if (visibleKeys.length === 0) {
+    if (plotLegend) plotLegend.textContent = 'Keine Streams aktiviert. Im Tabellen-Tab die Plot-Checkbox setzen.'
+    return
+  }
+
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  visibleKeys.forEach(key => {
+    const points = plotSeries.get(key) || []
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i]
+      if (p < minY) minY = p
+      if (p > maxY) maxY = p
+    }
+  })
+  if (!Number.isFinite(minY) || !Number.isFinite(maxY)) return
+  if (minY === maxY) {
+    minY -= 1
+    maxY += 1
+  }
+
+  const padL = 36
+  const padR = 12
+  const padT = 12
+  const padB = 20
+  const plotW = width - padL - padR
+  const plotH = height - padT - padB
+  const xStep = plotW / (MAX_PLOT_POINTS - 1)
+  const scaleY = plotH / (maxY - minY)
+
+  ctx.strokeStyle = '#1a1f22'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (plotH * i / 4)
+    ctx.moveTo(padL, y)
+    ctx.lineTo(padL + plotW, y)
+  }
+  ctx.stroke()
+
+  ctx.fillStyle = '#5a6a72'
+  ctx.font = '11px Courier New, monospace'
+  ctx.fillText(maxY.toFixed(2), 2, padT + 8)
+  ctx.fillText(minY.toFixed(2), 2, padT + plotH)
+
+  const legendFrag = document.createDocumentFragment()
+  visibleKeys.forEach(key => {
+    const points = plotSeries.get(key) || []
+    const color = _colorForSeriesKey(key)
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    const start = Math.max(0, points.length - MAX_PLOT_POINTS)
+    for (let i = start; i < points.length; i++) {
+      const x = padL + (i - start) * xStep
+      const y = padT + (maxY - points[i]) * scaleY
+      if (i === start) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+    if (plotLegend) {
+      const item = document.createElement('span')
+      item.className = 'plot-series'
+      const chip = document.createElement('span')
+      chip.className = 'plot-chip'
+      chip.style.background = color
+      const txt = document.createElement('span')
+      txt.textContent = key.replace(':', ' / ')
+      item.appendChild(chip)
+      item.appendChild(txt)
+      legendFrag.appendChild(item)
+    }
+  })
+  if (plotLegend) plotLegend.replaceChildren(legendFrag)
+}
 
 // ── ACK feedback ──────────────────────────────────────────────
 wsOn('ack', (msg) => {
@@ -296,6 +494,7 @@ targetButtons.forEach(btn => {
     targetButtons.forEach(b => b.classList.remove('active'))
     btn.classList.add('active')
     targetRole = parseInt(btn.dataset.role, 10)
+    _updateLedIndicators()
   })
 })
 
