@@ -28,7 +28,7 @@ class BotConnect {
 public:
     // ── State variables – updated by process() ───────────────
     // Active mode: the last selected mode is true, all others false.
-    // All false until the first mode command is received.
+    // Default at startup: mode1=true (channel 1 as standard active mode).
     bool mode1 = true;
     bool mode2 = false;
     bool mode3 = false;
@@ -36,7 +36,7 @@ public:
     bool mode5 = false;
 
     // Active calibration: the last received calibration command is true,
-    // all others false. All false until the first calibration command is received.
+    // all others false. Default at startup: calIrMax=true (channel 1 as standard).
     bool calIrMax   = true;
     bool calIrMin   = false;
     bool calLineMax = false;

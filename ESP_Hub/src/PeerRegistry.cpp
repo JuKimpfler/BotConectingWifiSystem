@@ -62,6 +62,11 @@ PeerInfo *PeerRegistry::get(int idx) {
     return &_peers[idx];
 }
 
+const PeerInfo *PeerRegistry::get(int idx) const {
+    if (idx < 0 || idx >= _count) return nullptr;
+    return &_peers[idx];
+}
+
 void PeerRegistry::markOnline(const uint8_t *mac, bool online) {
     PeerInfo *p = findByMac(mac);
     if (p) {

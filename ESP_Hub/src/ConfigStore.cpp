@@ -72,7 +72,7 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
     peers.clear();
 
     if (!LittleFS.exists(CONFIG_FILE)) {
-        if (strlen(HUB_CONFIG_DEFAULT_JSON) > 0) {
+        if (HUB_CONFIG_DEFAULT_JSON[0] != '\0') {
             JsonDocument defaultDoc;
             if (deserializeJson(defaultDoc, HUB_CONFIG_DEFAULT_JSON) == DeserializationError::Ok) {
                 cfg.version          = defaultDoc["version"]                        | cfg.version;
@@ -95,18 +95,19 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
                     info.role = (strcmp(roleStr, "SAT1") == 0) ? ROLE_SAT1 : ROLE_SAT2;
 
                     const char *macStr = p["mac"] | "";
-                    uint32_t b[6];
+                    uint32_t macParts[6];
                     if (sscanf(macStr, "%x:%x:%x:%x:%x:%x",
-                               &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) == 6) {
+                               &macParts[0], &macParts[1], &macParts[2],
+                               &macParts[3], &macParts[4], &macParts[5]) == 6) {
                         bool valid = true;
                         for (int i = 0; i < 6; i++) {
-                            if (b[i] > 0xFF) {
+                            if (macParts[i] > 0xFF) {
                                 valid = false;
                                 break;
                             }
                         }
                         if (valid) {
-                            for (int i = 0; i < 6; i++) info.mac[i] = (uint8_t)b[i];
+                            for (int i = 0; i < 6; i++) info.mac[i] = (uint8_t)macParts[i];
                         }
                     }
 
@@ -202,7 +203,7 @@ bool ConfigStore::save(const HubConfig &cfg, const PeerRegistry &peers) {
 
     JsonArray arr = doc["peers"].to<JsonArray>();
     for (int i = 0; i < peers.count(); i++) {
-        const PeerInfo *p = const_cast<PeerRegistry &>(peers).get(i);
+        const PeerInfo *p = peers.get(i);
         if (!p) continue;
         JsonObject o = arr.add<JsonObject>();
         o["name"] = p->name;
@@ -224,7 +225,7 @@ bool ConfigStore::save(const HubConfig &cfg, const PeerRegistry &peers) {
     // Save secrets to NVS
     _writeNvsSecret("pmk", cfg.pmk_hex);
     for (int i = 0; i < peers.count(); i++) {
-        const PeerInfo *p = const_cast<PeerRegistry &>(peers).get(i);
+        const PeerInfo *p = peers.get(i);
         if (!p) continue;
         char nvsKey[20];
         snprintf(nvsKey, sizeof(nvsKey), "ltk_%02x%02x", p->mac[4], p->mac[5]);
@@ -250,7 +251,7 @@ bool ConfigStore::exportJson(const HubConfig &cfg, const PeerRegistry &peers, St
 
     JsonArray arr = doc["peers"].to<JsonArray>();
     for (int i = 0; i < peers.count(); i++) {
-        const PeerInfo *p = const_cast<PeerRegistry &>(peers).get(i);
+        const PeerInfo *p = peers.get(i);
         if (!p) continue;
         JsonObject o = arr.add<JsonObject>();
         o["name"] = p->name;

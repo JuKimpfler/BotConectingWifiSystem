@@ -20,7 +20,7 @@ static void parseUiLabels(const JsonDocument &doc, const char *key, char labels[
     JsonArrayConst arr = doc[key].as<JsonArrayConst>();
     for (uint8_t i = 0; i < count; i++) {
         if (i < arr.size() && arr[i].is<const char *>()) {
-            strlcpy(labels[i], arr[i] | "", UI_LABEL_MAX_LEN);
+            strlcpy(labels[i], arr[i] | "", sizeof(labels[i]));
         }
     }
 }
