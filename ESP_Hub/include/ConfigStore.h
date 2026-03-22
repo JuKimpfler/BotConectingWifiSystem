@@ -8,6 +8,10 @@
 #include "PeerRegistry.h"
 #include "hub_config.h"
 
+constexpr uint8_t MODE_CHANNEL_COUNT = 5;
+constexpr uint8_t CAL_CHANNEL_COUNT  = 5;
+constexpr size_t  UI_LABEL_MAX_LEN   = 24;
+
 struct HubConfig {
     uint8_t  version;
     uint8_t  channel;
@@ -17,6 +21,8 @@ struct HubConfig {
     uint32_t heartbeat_timeout_ms;
     uint16_t ui_rate_limit_ms;
     char     ui_theme[8];
+    char     mode_labels[MODE_CHANNEL_COUNT][UI_LABEL_MAX_LEN];
+    char     cal_labels[CAL_CHANNEL_COUNT][UI_LABEL_MAX_LEN];
     uint8_t  network_id;   // Anti-mis-pairing system ID (0=legacy, 1-255=system-specific)
 };
 
@@ -25,6 +31,7 @@ public:
     bool begin();
     bool load(HubConfig &cfg, PeerRegistry &peers);
     bool save(const HubConfig &cfg, const PeerRegistry &peers);
+    bool exportJson(const HubConfig &cfg, const PeerRegistry &peers, String &out);
     bool factoryReset();
 
     static void hexToBytes(const char *hex, uint8_t *out, int len);

@@ -22,6 +22,21 @@ const JOYSTICK_SEND_MS = 50
 // Telemetry stream map: name -> { current, min, max }
 let telemFilter = '1'
 const streams = new Map()
+const MODE_CHANNELS = 5
+const CAL_CHANNELS = 5
+let modeLabels = Array.from({ length: MODE_CHANNELS }, (_, i) => `Mode ${i + 1}`)
+let calLabels = Array.from({ length: CAL_CHANNELS }, (_, i) => `Calib ${i + 1}`)
+
+function _renderModeCalLabels() {
+  document.querySelectorAll('.btn-mode').forEach(btn => {
+    const idx = Math.max(0, Math.min(MODE_CHANNELS - 1, (parseInt(btn.dataset.mode, 10) || 1) - 1))
+    btn.textContent = `${idx + 1} – ${modeLabels[idx] || `Mode ${idx + 1}`}`
+  })
+  document.querySelectorAll('.btn-cal').forEach(btn => {
+    const idx = Math.max(0, Math.min(CAL_CHANNELS - 1, (parseInt(btn.dataset.cal, 10) || 1) - 1))
+    btn.textContent = `${idx + 1} – ${calLabels[idx] || `Calib ${idx + 1}`}`
+  })
+}
 
 // ── Load saved config into settings form (Bug 2) ──────────────
 function _loadConfig() {
@@ -34,6 +49,17 @@ function _loadConfig() {
         document.getElementById('cfg-network-id').value = cfg.network_id
       if (cfg.telemetry && cfg.telemetry.max_rate_hz != null)
         document.getElementById('cfg-telem-hz').value = cfg.telemetry.max_rate_hz
+      if (cfg.ui && Array.isArray(cfg.ui.mode_labels)) {
+        cfg.ui.mode_labels.slice(0, MODE_CHANNELS).forEach((name, i) => {
+          if (typeof name === 'string') modeLabels[i] = name
+        })
+      }
+      if (cfg.ui && Array.isArray(cfg.ui.cal_labels)) {
+        cfg.ui.cal_labels.slice(0, CAL_CHANNELS).forEach((name, i) => {
+          if (typeof name === 'string') calLabels[i] = name
+        })
+      }
+      _renderModeCalLabels()
     })
     .catch(() => { /* first boot – use form defaults */ })
 }
@@ -512,6 +538,59 @@ document.querySelectorAll('.btn-cal').forEach(btn => {
   })
 })
 
+function _saveUiLabels() {
+  const channel   = parseInt(document.getElementById('cfg-channel').value, 10)
+  const pmk       = document.getElementById('cfg-pmk').value.trim()
+  const hz        = parseInt(document.getElementById('cfg-telem-hz').value, 10)
+  const networkId = parseInt(document.getElementById('cfg-network-id').value, 10)
+  return wsSend({
+    type: 'settings',
+    data: JSON.stringify({
+      channel, pmk, telemetry_max_hz: hz, network_id: networkId,
+      mode_labels: modeLabels,
+      cal_labels: calLabels
+    })
+  })
+}
+
+document.getElementById('btn-mode-label-add').addEventListener('click', () => {
+  const channel = Math.max(1, Math.min(MODE_CHANNELS, parseInt(document.getElementById('mode-label-channel').value, 10) || 1))
+  const name = document.getElementById('mode-label-text').value.trim()
+  if (!name) {
+    modeFeedback.textContent = 'Name required'
+    modeFeedback.className = 'feedback error'
+    return
+  }
+  modeLabels[channel - 1] = name
+  _renderModeCalLabels()
+  if (!_saveUiLabels()) {
+    modeFeedback.textContent = 'Error: WebSocket not connected'
+    modeFeedback.className = 'feedback error'
+    return
+  }
+  modeFeedback.textContent = `Saved mode label for channel ${channel}`
+  modeFeedback.className = 'feedback'
+})
+
+document.getElementById('btn-cal-label-add').addEventListener('click', () => {
+  const channel = Math.max(1, Math.min(CAL_CHANNELS, parseInt(document.getElementById('cal-label-channel').value, 10) || 1))
+  const name = document.getElementById('cal-label-text').value.trim()
+  if (!name) {
+    calFeedback.textContent = 'Name required'
+    calFeedback.className = 'feedback error'
+    return
+  }
+  calLabels[channel - 1] = name
+  _renderModeCalLabels()
+  if (!_saveUiLabels()) {
+    calFeedback.textContent = 'Error: WebSocket not connected'
+    calFeedback.className = 'feedback error'
+    return
+  }
+  calFeedback.textContent = `Saved cal label for channel ${channel}`
+  calFeedback.className = 'feedback'
+})
+
 // ── Settings ──────────────────────────────────────────────────
 let _settingsAckTimer = null
 
@@ -523,7 +602,11 @@ document.getElementById('btn-save-cfg').addEventListener('click', () => {
 
   if (!wsSend({
     type: 'settings',
-    data: JSON.stringify({ channel, pmk, telemetry_max_hz: hz, network_id: networkId })
+    data: JSON.stringify({
+      channel, pmk, telemetry_max_hz: hz, network_id: networkId,
+      mode_labels: modeLabels,
+      cal_labels: calLabels
+    })
   })) {
     settingsFeedback.textContent = 'Error: WebSocket not connected'
     settingsFeedback.className = 'feedback error'
@@ -541,6 +624,31 @@ document.getElementById('btn-save-cfg').addEventListener('click', () => {
       settingsFeedback.className = 'feedback error'
     }
   }, 5000)
+})
+
+document.getElementById('btn-download-cfg').addEventListener('click', () => {
+  fetch('/api/config_export')
+    .then(r => {
+      if (!r.ok) throw new Error('download failed')
+      return r.text()
+    })
+    .then(text => {
+      const blob = new Blob([text], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'hub-config-export.json'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      settingsFeedback.textContent = 'Config JSON downloaded'
+      settingsFeedback.className = 'feedback'
+    })
+    .catch(() => {
+      settingsFeedback.textContent = 'Download failed'
+      settingsFeedback.className = 'feedback error'
+    })
 })
 
 // Clear ACK timeout when a settings ACK arrives
@@ -615,4 +723,5 @@ document.getElementById('btn-reset-peers').addEventListener('click', () => {
 })
 
 // ── Boot ──────────────────────────────────────────────────────
+_renderModeCalLabels()
 wsConnect()

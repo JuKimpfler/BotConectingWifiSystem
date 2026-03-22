@@ -16,6 +16,15 @@ static bool parseMacStr(const char *macStr, uint8_t out[6]) {
                   &out[3], &out[4], &out[5]) == 6;
 }
 
+static void parseUiLabels(const JsonDocument &doc, const char *key, char labels[][UI_LABEL_MAX_LEN], uint8_t count) {
+    JsonArrayConst arr = doc[key].as<JsonArrayConst>();
+    for (uint8_t i = 0; i < count; i++) {
+        if (i < arr.size() && arr[i].is<const char *>()) {
+            strlcpy(labels[i], arr[i] | "", UI_LABEL_MAX_LEN);
+        }
+    }
+}
+
 void CommandRouter::begin(AsyncWebSocket *ws, EspNowManager *espnow,
                           PeerRegistry *peers, TelemetryBuffer *telem,
                           ConfigStore *cfgStore, HubConfig *hubCfg) {
@@ -276,6 +285,8 @@ void CommandRouter::_handleSettings(const char *json) {
             _telem->begin(1000 / _hubCfg->telemetry_max_hz);
         }
     }
+    parseUiLabels(doc, "mode_labels", _hubCfg->mode_labels, MODE_CHANNEL_COUNT);
+    parseUiLabels(doc, "cal_labels", _hubCfg->cal_labels, CAL_CHANNEL_COUNT);
 
     // Persist to flash
     bool ok = _cfgStore->save(*_hubCfg, *_peers);

@@ -29,7 +29,7 @@ public:
     // ── State variables – updated by process() ───────────────
     // Active mode: the last selected mode is true, all others false.
     // All false until the first mode command is received.
-    bool mode1 = false;
+    bool mode1 = true;
     bool mode2 = false;
     bool mode3 = false;
     bool mode4 = false;
@@ -37,7 +37,7 @@ public:
 
     // Active calibration: the last received calibration command is true,
     // all others false. All false until the first calibration command is received.
-    bool calIrMax   = false;
+    bool calIrMax   = true;
     bool calIrMin   = false;
     bool calLineMax = false;
     bool calLineMin = false;

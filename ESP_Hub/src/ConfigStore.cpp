@@ -11,6 +11,43 @@
 
 #define NVS_NAMESPACE "hubcfg"
 
+static void setDefaultUiLabels(HubConfig &cfg) {
+    static const char *kModeDefaults[MODE_CHANNEL_COUNT] = {
+        "Mode 1", "Mode 2", "Mode 3", "Mode 4", "Mode 5"
+    };
+    static const char *kCalDefaults[CAL_CHANNEL_COUNT] = {
+        "Calib 1", "Calib 2", "Calib 3", "Calib 4", "Calib 5"
+    };
+    for (uint8_t i = 0; i < MODE_CHANNEL_COUNT; i++) {
+        strlcpy(cfg.mode_labels[i], kModeDefaults[i], sizeof(cfg.mode_labels[i]));
+    }
+    for (uint8_t i = 0; i < CAL_CHANNEL_COUNT; i++) {
+        strlcpy(cfg.cal_labels[i], kCalDefaults[i], sizeof(cfg.cal_labels[i]));
+    }
+}
+
+static void loadUiLabelsFromDoc(HubConfig &cfg, const JsonDocument &doc) {
+    JsonArrayConst modeLabels = doc["ui"]["mode_labels"].as<JsonArrayConst>();
+    for (uint8_t i = 0; i < MODE_CHANNEL_COUNT; i++) {
+        if (i < modeLabels.size() && modeLabels[i].is<const char *>()) {
+            strlcpy(cfg.mode_labels[i], modeLabels[i] | "", sizeof(cfg.mode_labels[i]));
+        }
+    }
+    JsonArrayConst calLabels = doc["ui"]["cal_labels"].as<JsonArrayConst>();
+    for (uint8_t i = 0; i < CAL_CHANNEL_COUNT; i++) {
+        if (i < calLabels.size() && calLabels[i].is<const char *>()) {
+            strlcpy(cfg.cal_labels[i], calLabels[i] | "", sizeof(cfg.cal_labels[i]));
+        }
+    }
+}
+
+static void writeUiLabelsToDoc(const HubConfig &cfg, JsonDocument &doc) {
+    JsonArray modeArr = doc["ui"]["mode_labels"].to<JsonArray>();
+    for (uint8_t i = 0; i < MODE_CHANNEL_COUNT; i++) modeArr.add(cfg.mode_labels[i]);
+    JsonArray calArr = doc["ui"]["cal_labels"].to<JsonArray>();
+    for (uint8_t i = 0; i < CAL_CHANNEL_COUNT; i++) calArr.add(cfg.cal_labels[i]);
+}
+
 bool ConfigStore::begin() {
     if (!LittleFS.begin(true)) {
         Serial.println("[CFG] LittleFS mount failed – formatting");
@@ -31,9 +68,55 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
     cfg.ui_rate_limit_ms      = 20;
     cfg.network_id            = HUB_NETWORK_ID;
     strncpy(cfg.ui_theme, "dark", sizeof(cfg.ui_theme));
+    setDefaultUiLabels(cfg);
     peers.clear();
 
     if (!LittleFS.exists(CONFIG_FILE)) {
+        if (strlen(HUB_CONFIG_DEFAULT_JSON) > 0) {
+            JsonDocument defaultDoc;
+            if (deserializeJson(defaultDoc, HUB_CONFIG_DEFAULT_JSON) == DeserializationError::Ok) {
+                cfg.version          = defaultDoc["version"]                        | cfg.version;
+                cfg.channel          = defaultDoc["channel"]                        | cfg.channel;
+                cfg.network_id       = defaultDoc["network_id"]                     | cfg.network_id;
+                cfg.telemetry_max_hz = defaultDoc["telemetry"]["max_rate_hz"]       | cfg.telemetry_max_hz;
+                cfg.heartbeat_interval_ms = defaultDoc["heartbeat"]["interval_ms"]  | cfg.heartbeat_interval_ms;
+                cfg.heartbeat_timeout_ms  = defaultDoc["heartbeat"]["timeout_ms"]   | cfg.heartbeat_timeout_ms;
+                cfg.ui_rate_limit_ms = defaultDoc["ui"]["rate_limit_ms"]            | cfg.ui_rate_limit_ms;
+                strlcpy(cfg.ui_theme, defaultDoc["ui"]["theme"] | cfg.ui_theme, sizeof(cfg.ui_theme));
+                strlcpy(cfg.pmk_hex, defaultDoc["pmk"] | "", sizeof(cfg.pmk_hex));
+                loadUiLabelsFromDoc(cfg, defaultDoc);
+
+                JsonArray arr = defaultDoc["peers"].as<JsonArray>();
+                for (JsonObject p : arr) {
+                    PeerInfo info = {};
+                    strlcpy(info.name,    p["name"]    | "",  sizeof(info.name));
+                    strlcpy(info.ltk_hex, p["ltk"]     | "",  sizeof(info.ltk_hex));
+                    const char *roleStr = p["role"] | "";
+                    info.role = (strcmp(roleStr, "SAT1") == 0) ? ROLE_SAT1 : ROLE_SAT2;
+
+                    const char *macStr = p["mac"] | "";
+                    uint32_t b[6];
+                    if (sscanf(macStr, "%x:%x:%x:%x:%x:%x",
+                               &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) == 6) {
+                        bool valid = true;
+                        for (int i = 0; i < 6; i++) {
+                            if (b[i] > 0xFF) {
+                                valid = false;
+                                break;
+                            }
+                        }
+                        if (valid) {
+                            for (int i = 0; i < 6; i++) info.mac[i] = (uint8_t)b[i];
+                        }
+                    }
+
+                    peers.addOrUpdate(info);
+                }
+                Serial.println("[CFG] No file, loaded compile-time HUB_CONFIG_DEFAULT_JSON");
+                return true;
+            }
+            Serial.println("[CFG] HUB_CONFIG_DEFAULT_JSON parse failed, using defaults");
+        }
         Serial.println("[CFG] No config file – using defaults");
         return true;
     }
@@ -57,6 +140,7 @@ bool ConfigStore::load(HubConfig &cfg, PeerRegistry &peers) {
     cfg.heartbeat_timeout_ms  = doc["heartbeat"]["timeout_ms"]   | 4000;
     cfg.ui_rate_limit_ms = doc["ui"]["rate_limit_ms"]            | 20;
     strlcpy(cfg.ui_theme, doc["ui"]["theme"] | "dark", sizeof(cfg.ui_theme));
+    loadUiLabelsFromDoc(cfg, doc);
 
     // Load PMK from NVS
     _readNvsSecret("pmk", cfg.pmk_hex, sizeof(cfg.pmk_hex));
@@ -114,6 +198,7 @@ bool ConfigStore::save(const HubConfig &cfg, const PeerRegistry &peers) {
     doc["heartbeat"]["timeout_ms"]      = cfg.heartbeat_timeout_ms;
     doc["ui"]["rate_limit_ms"]          = cfg.ui_rate_limit_ms;
     doc["ui"]["theme"]                  = cfg.ui_theme;
+    writeUiLabelsToDoc(cfg, doc);
 
     JsonArray arr = doc["peers"].to<JsonArray>();
     for (int i = 0; i < peers.count(); i++) {
@@ -148,6 +233,40 @@ bool ConfigStore::save(const HubConfig &cfg, const PeerRegistry &peers) {
 
     Serial.println("[CFG] Saved");
     return true;
+}
+
+bool ConfigStore::exportJson(const HubConfig &cfg, const PeerRegistry &peers, String &out) {
+    JsonDocument doc;
+    doc["version"]    = cfg.version;
+    doc["channel"]    = cfg.channel;
+    doc["network_id"] = cfg.network_id;
+    doc["pmk"]        = cfg.pmk_hex;
+    doc["telemetry"]["max_rate_hz"]     = cfg.telemetry_max_hz;
+    doc["heartbeat"]["interval_ms"]     = cfg.heartbeat_interval_ms;
+    doc["heartbeat"]["timeout_ms"]      = cfg.heartbeat_timeout_ms;
+    doc["ui"]["rate_limit_ms"]          = cfg.ui_rate_limit_ms;
+    doc["ui"]["theme"]                  = cfg.ui_theme;
+    writeUiLabelsToDoc(cfg, doc);
+
+    JsonArray arr = doc["peers"].to<JsonArray>();
+    for (int i = 0; i < peers.count(); i++) {
+        const PeerInfo *p = const_cast<PeerRegistry &>(peers).get(i);
+        if (!p) continue;
+        JsonObject o = arr.add<JsonObject>();
+        o["name"] = p->name;
+        o["role"] = (p->role == ROLE_SAT1) ? "SAT1" : "SAT2";
+        char macStr[18];
+        snprintf(macStr, sizeof(macStr),
+                 "%02X:%02X:%02X:%02X:%02X:%02X",
+                 p->mac[0], p->mac[1], p->mac[2],
+                 p->mac[3], p->mac[4], p->mac[5]);
+        o["mac"] = macStr;
+        o["ltk"] = p->ltk_hex;
+    }
+
+    out = "";
+    serializeJsonPretty(doc, out);
+    return out.length() > 0;
 }
 
 bool ConfigStore::factoryReset() {
