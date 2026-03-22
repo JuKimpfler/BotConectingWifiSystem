@@ -305,6 +305,23 @@ button:active { opacity: 0.7; }
 .btn-mode:hover { border-color: var(--amber); color: var(--amber); }
 .btn-cal:hover  { border-color: var(--blue);  color: var(--blue); }
 
+.mini-editor {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.mini-editor h3 {
+  width: 100%;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: normal;
+}
+
 /* ── Feedback ────────────────────────────────────────────── */
 .feedback {
   margin-top: 10px;

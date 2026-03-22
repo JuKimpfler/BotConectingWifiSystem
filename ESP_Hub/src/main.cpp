@@ -158,6 +158,15 @@ void setup() {
         req->send(LittleFS, CONFIG_FILE, "application/json");
     });
 
+    server.on("/api/config_export", HTTP_GET, [](AsyncWebServerRequest *req) {
+        String json;
+        if (!cfgStore.exportJson(hubCfg, peers, json)) {
+            req->send(500, "application/json", "{\"error\":\"export failed\"}");
+            return;
+        }
+        req->send(200, "application/json", json);
+    });
+
     // REST: POST /api/config (receives JSON body)
     server.on("/api/factory_reset", HTTP_POST, [](AsyncWebServerRequest *req) {
         cfgStore.factoryReset();

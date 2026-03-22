@@ -82,6 +82,9 @@
 
 // ── Config file in LittleFS ───────────────────────────────────
 #define CONFIG_FILE          "/config.json"
+#ifndef HUB_CONFIG_DEFAULT_JSON
+#define HUB_CONFIG_DEFAULT_JSON ""
+#endif
 
 // ── WebSocket ─────────────────────────────────────────────────
 #define WS_PORT              80

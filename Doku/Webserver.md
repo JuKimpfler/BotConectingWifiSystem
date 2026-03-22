@@ -36,12 +36,12 @@ Aus `ESP_Hub/ui/index.html`:
 - START
 
 ### Modes
-- Modus 1..5
+- 5 feste Channels (1..5), Name in UI frei konfigurierbar
+- Mini-Menü zum Hinzufügen/Umbenennen von Mode-Buttons pro Channel
 
 ### Calibrate
-- IR Max/Min
-- Line Max/Min
-- BNO
+- 5 feste Channels (1..5), Name in UI frei konfigurierbar
+- Mini-Menü zum Hinzufügen/Umbenennen von Calib-Buttons pro Channel
 
 ### Settings
 - Channel
@@ -49,6 +49,7 @@ Aus `ESP_Hub/ui/index.html`:
 - Network-ID
 - Peer-Scan und manuelles Peer-Add
 - Save / Reset / Factory-Reset
+- Download der vollständigen aktuellen Konfiguration als JSON (`/api/config_export`)
 
 ---
 
@@ -81,6 +82,7 @@ pio run -e esp_hub -t uploadfs
 - **Channel**: muss zu Satelliten passen
 - **Network-ID**: muss zu `ESPNOW_NETWORK_ID` passen
 - **Peer-Liste**: langfristig speichern, damit Reconnect nach Reboot möglich ist
+- **Mode/Calib Labels**: werden in der Hub-Config gespeichert; wirken nur auf die Web-UI-Anzeige
 
 ---
 

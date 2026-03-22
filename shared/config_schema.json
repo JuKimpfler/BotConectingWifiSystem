@@ -73,6 +73,28 @@
           "minimum": 10,
           "maximum": 1000,
           "default": 20
+        },
+        "mode_labels": {
+          "type": "array",
+          "description": "Display labels for Mode channels 1..5 (UI only)",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "string",
+            "maxLength": 24
+          },
+          "default": ["Mode 1", "Mode 2", "Mode 3", "Mode 4", "Mode 5"]
+        },
+        "cal_labels": {
+          "type": "array",
+          "description": "Display labels for Calibration channels 1..5 (UI only)",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "string",
+            "maxLength": 24
+          },
+          "default": ["Calib 1", "Calib 2", "Calib 3", "Calib 4", "Calib 5"]
         }
       }
     },

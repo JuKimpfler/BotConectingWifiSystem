@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ESP-NOW Hub</title>
-  <script type="module" crossorigin src="/assets/index-D_scy2Zx.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-B2x59tqL.css">
+  <script type="module" crossorigin src="/assets/index-ule0WTQC.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BSDwCD29.css">
 </head>
 <body>
   <div id="app">
@@ -98,11 +98,21 @@
       <div class="panel">
         <h2>Mode Selection</h2>
         <div class="mode-grid">
-          <button class="btn-mode" data-mode="1">1 – PID Mode</button>
-          <button class="btn-mode" data-mode="2">2 – Ball Approach</button>
-          <button class="btn-mode" data-mode="3">3 – Goal Rotate</button>
-          <button class="btn-mode" data-mode="4">4 – Homing</button>
-          <button class="btn-mode" data-mode="5">5 – Defender</button>
+          <button class="btn-mode" data-mode="1">1 – Mode 1</button>
+          <button class="btn-mode" data-mode="2">2 – Mode 2</button>
+          <button class="btn-mode" data-mode="3">3 – Mode 3</button>
+          <button class="btn-mode" data-mode="4">4 – Mode 4</button>
+          <button class="btn-mode" data-mode="5">5 – Mode 5</button>
+        </div>
+        <div class="mini-editor">
+          <h3>Add/Rename Mode Button</h3>
+          <label>Channel (1–5):
+            <input type="number" id="mode-label-channel" min="1" max="5" value="1" />
+          </label>
+          <label>Name:
+            <input type="text" id="mode-label-text" maxlength="24" placeholder="e.g. Ball Hunter" />
+          </label>
+          <button id="btn-mode-label-add">Add / Update</button>
         </div>
         <div id="mode-feedback" class="feedback"></div>
       </div>
@@ -113,11 +123,21 @@
       <div class="panel">
         <h2>Calibration</h2>
         <div class="cal-grid">
-          <button class="btn-cal" data-cal="1">IR Max</button>
-          <button class="btn-cal" data-cal="2">IR Min</button>
-          <button class="btn-cal" data-cal="3">Line Max</button>
-          <button class="btn-cal" data-cal="4">Line Min</button>
-          <button class="btn-cal" data-cal="5">BNO</button>
+          <button class="btn-cal" data-cal="1">1 – Calib 1</button>
+          <button class="btn-cal" data-cal="2">2 – Calib 2</button>
+          <button class="btn-cal" data-cal="3">3 – Calib 3</button>
+          <button class="btn-cal" data-cal="4">4 – Calib 4</button>
+          <button class="btn-cal" data-cal="5">5 – Calib 5</button>
+        </div>
+        <div class="mini-editor">
+          <h3>Add/Rename Calib Button</h3>
+          <label>Channel (1–5):
+            <input type="number" id="cal-label-channel" min="1" max="5" value="1" />
+          </label>
+          <label>Name:
+            <input type="text" id="cal-label-text" maxlength="24" placeholder="e.g. IR Max" />
+          </label>
+          <button id="btn-cal-label-add">Add / Update</button>
         </div>
         <div id="cal-feedback" class="feedback"></div>
       </div>
@@ -161,6 +181,7 @@
           <label>Max rate (Hz): <input type="number" id="cfg-telem-hz" value="20" min="1" max="50" /></label>
           <h2>Actions</h2>
           <button id="btn-save-cfg">Save Config</button>
+          <button id="btn-download-cfg">Download Config JSON</button>
           <button id="btn-reset-peers" class="btn-danger">Reset Peers</button>
           <button id="btn-factory-reset" class="btn-danger">Factory Reset</button>
           <div id="settings-feedback" class="feedback"></div>

@@ -32,6 +32,7 @@ public:
     PeerInfo   *findByRole(uint8_t role);
     int         count() const;
     PeerInfo   *get(int idx);
+    const PeerInfo *get(int idx) const;
     void        markOnline(const uint8_t *mac, bool online);
     /** Record that the data path to this peer is confirmed working right now. */
     void        markDataOk(const uint8_t *mac);
