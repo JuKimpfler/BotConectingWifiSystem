@@ -25,7 +25,12 @@ const streams = new Map()
 const plotSelection = new Map() // key -> enabled (default false)
 const plotSeries = new Map()    // key -> number[]
 const MAX_PLOT_POINTS = 200
-const LED_STREAM_REGEX = /^led([1-4])$/i
+// Hysteresis buffer: trim only after points exceed MAX_PLOT_POINTS + MAX_PLOT_BUFFER.
+const MAX_PLOT_BUFFER = 24
+const LED_STREAM_REGEX = /^Led([1-4])$/
+// Treat numeric telemetry >= 0.5 as "on" (supports 0/1 as int or float).
+const LED_ON_THRESHOLD = 0.5
+const PLOT_EMPTY_MESSAGE = 'Keine Streams aktiviert. Im Tabellen-Tab die Plot-Checkbox setzen.'
 const ledStateByRole = {
   1: [false, false, false, false],
   2: [false, false, false, false],
@@ -253,7 +258,7 @@ wsOn('telemetry', (msg) => {
     const ledMatch = s.name.match(LED_STREAM_REGEX)
     if (ledMatch && (role === 1 || role === 2)) {
       const ledIdx = parseInt(ledMatch[1], 10) - 1
-      ledStateByRole[role][ledIdx] = numCurrent >= 0.5
+      ledStateByRole[role][ledIdx] = numCurrent >= LED_ON_THRESHOLD
     }
 
     if (Number.isFinite(numCurrent)) {
@@ -263,7 +268,9 @@ wsOn('telemetry', (msg) => {
         plotSeries.set(key, points)
       }
       points.push(numCurrent)
-      if (points.length > MAX_PLOT_POINTS) points.splice(0, points.length - MAX_PLOT_POINTS)
+      if (points.length > (MAX_PLOT_POINTS + MAX_PLOT_BUFFER)) {
+        points.splice(0, points.length - MAX_PLOT_POINTS)
+      }
     }
   })
   _renderTelemetry()
@@ -302,17 +309,17 @@ function _renderTelemetry() {
 
     const curTd = document.createElement('td')
     curTd.className = 'value-current'
-    curTd.textContent = String(fmt(s.current))
+    curTd.textContent = fmt(s.current)
     row.appendChild(curTd)
 
     const minTd = document.createElement('td')
     minTd.className = 'value-dim'
-    minTd.textContent = String(fmt(s.min))
+    minTd.textContent = fmt(s.min)
     row.appendChild(minTd)
 
     const maxTd = document.createElement('td')
     maxTd.className = 'value-dim'
-    maxTd.textContent = String(fmt(s.max))
+    maxTd.textContent = fmt(s.max)
     row.appendChild(maxTd)
 
     const plotTd = document.createElement('td')
@@ -354,9 +361,12 @@ function _updateLedIndicators() {
 }
 
 function _colorForSeriesKey(key) {
-  let hash = 0
-  for (let i = 0; i < key.length; i++) hash = ((hash << 5) - hash) + key.charCodeAt(i)
-  const hue = Math.abs(hash) % 360
+  let hash = 2166136261 // FNV-1a 32-bit offset basis
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i)
+    hash = Math.imul(hash, 16777619) >>> 0 // FNV-1a 32-bit prime
+  }
+  const hue = hash % 360
   return `hsl(${hue} 85% 58%)`
 }
 
@@ -395,7 +405,7 @@ function _drawPlot() {
   })
 
   if (visibleKeys.length === 0) {
-    if (plotLegend) plotLegend.textContent = 'Keine Streams aktiviert. Im Tabellen-Tab die Plot-Checkbox setzen.'
+    if (plotLegend) plotLegend.textContent = PLOT_EMPTY_MESSAGE
     return
   }
 
