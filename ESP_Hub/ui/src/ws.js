@@ -9,11 +9,22 @@ const WS_URL = (() => {
 })()
 
 const RECONNECT_DELAY = 3000
+const TELEMETRY_DISPATCH_MIN_INTERVAL_MS = 100
 
 let socket = null
 let listeners = {}
 let connected = false
 let _reconnectTimer = null
+let _telemetryFlushTimer = null
+let _pendingTelemetryMsg = null
+
+function _flushTelemetry() {
+  _telemetryFlushTimer = null
+  if (!_pendingTelemetryMsg) return
+  const msg = _pendingTelemetryMsg
+  _pendingTelemetryMsg = null
+  _emit('telemetry', msg)
+}
 
 export function wsConnect() {
   // Cancel any pending reconnect timer before creating a new connection
@@ -39,6 +50,11 @@ export function wsConnect() {
 
   socket.onclose = () => {
     connected = false
+    if (_telemetryFlushTimer !== null) {
+      clearTimeout(_telemetryFlushTimer)
+      _telemetryFlushTimer = null
+    }
+    _pendingTelemetryMsg = null
     _emit('ws_close')
     _reconnectTimer = setTimeout(wsConnect, RECONNECT_DELAY)
   }
@@ -50,6 +66,13 @@ export function wsConnect() {
   socket.onmessage = (evt) => {
     try {
       const msg = JSON.parse(evt.data)
+      if (msg.type === 'telemetry') {
+        _pendingTelemetryMsg = msg
+        if (_telemetryFlushTimer === null) {
+          _telemetryFlushTimer = setTimeout(_flushTelemetry, TELEMETRY_DISPATCH_MIN_INTERVAL_MS)
+        }
+        return
+      }
       _emit(msg.type, msg)
     } catch {
       // ignore non-JSON frames
