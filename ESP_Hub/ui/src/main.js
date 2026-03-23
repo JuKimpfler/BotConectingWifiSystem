@@ -27,6 +27,7 @@ const plotSeries = new Map()    // key -> number[]
 const MAX_PLOT_POINTS = 200
 // Hysteresis buffer: trim only after points exceed MAX_PLOT_POINTS + MAX_PLOT_BUFFER.
 const MAX_PLOT_BUFFER = 24
+const TELEMETRY_RENDER_MIN_INTERVAL_MS = 100
 const LED_STREAM_REGEX = /^Led([1-4])$/
 // Treat numeric telemetry >= 0.5 as "on" (supports 0/1 as int or float).
 const LED_ON_THRESHOLD = 0.5
@@ -40,6 +41,11 @@ const CAL_CHANNELS = 5
 let modeLabels = Array.from({ length: MODE_CHANNELS }, (_, i) => `Mode ${i + 1}`)
 let calLabels = Array.from({ length: CAL_CHANNELS }, (_, i) => `Calib ${i + 1}`)
 let _plotDrawScheduled = false
+let _plotDrawPending = false
+let _telemRenderScheduled = false
+let _telemRenderPending = false
+let _lastTelemetryRenderTs = 0
+const telemRows = new Map() // key -> { row, roleTd, nameTd, curTd, minTd, maxTd, chk }
 
 function _renderModeCalLabels() {
   document.querySelectorAll('.btn-mode').forEach(btn => {
@@ -98,12 +104,19 @@ const settingsFeedback = document.getElementById('settings-feedback')
 const peerList   = document.getElementById('peer-list')
 
 // ── Tab switching ─────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(btn => {
+const tabButtons = Array.from(document.querySelectorAll('.tab'))
+const tabPanels = Array.from(document.querySelectorAll('.tab-panel'))
+let activeTab = (tabButtons.find(t => t.classList.contains('active'))?.dataset.tab) || 'table'
+tabButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
+    if (btn.dataset.tab === activeTab) return
+    tabButtons.forEach(t => t.classList.remove('active'))
+    tabPanels.forEach(p => p.classList.remove('active'))
     btn.classList.add('active')
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active')
+    activeTab = btn.dataset.tab || activeTab
+    if (activeTab === 'table' && _telemRenderPending) _scheduleTelemetryRender(true)
+    if (activeTab === 'plotter' && _plotDrawPending) _schedulePlotDraw(true)
   })
 })
 
@@ -115,7 +128,7 @@ telemFilterBtns.forEach(btn => {
     telemFilterBtns.forEach(b => b.classList.remove('active'))
     btn.classList.add('active')
     telemFilter = btn.dataset.filter || 'both'
-    _renderTelemetry()
+    _scheduleTelemetryRender(true)
     _updateLedIndicators()
     _schedulePlotDraw()
   })
@@ -138,6 +151,8 @@ wsOn('ws_close', () => {
   streams.clear()
   plotSeries.clear()
   plotSelection.clear()
+  telemRows.clear()
+  _telemRenderScheduled = false
   telemBody.innerHTML = ''
   _updateLedIndicators()
   _schedulePlotDraw()
@@ -273,65 +288,89 @@ wsOn('telemetry', (msg) => {
       }
     }
   })
-  _renderTelemetry()
+  _scheduleTelemetryRender()
   _updateLedIndicators()
   _schedulePlotDraw()
 })
 
+function _scheduleTelemetryRender(force = false) {
+  if (_telemRenderScheduled) return
+  if (!force && activeTab !== 'table') {
+    _telemRenderPending = true
+    return
+  }
+  _telemRenderScheduled = true
+  const now = performance.now()
+  const delay = force ? 0 : Math.max(0, TELEMETRY_RENDER_MIN_INTERVAL_MS - (now - _lastTelemetryRenderTs))
+  window.setTimeout(() => {
+    requestAnimationFrame(() => {
+      _telemRenderScheduled = false
+      _telemRenderPending = false
+      _lastTelemetryRenderTs = performance.now()
+      _renderTelemetry()
+    })
+  }, delay)
+}
+
+function _createTelemetryRow() {
+  const row = document.createElement('tr')
+  const roleTd = document.createElement('td')
+  const nameTd = document.createElement('td')
+  const curTd = document.createElement('td')
+  const minTd = document.createElement('td')
+  const maxTd = document.createElement('td')
+  const plotTd = document.createElement('td')
+  const chk = document.createElement('input')
+
+  curTd.className = 'value-current'
+  minTd.className = 'value-dim'
+  maxTd.className = 'value-dim'
+  chk.type = 'checkbox'
+  chk.className = 'plot-toggle'
+  plotTd.appendChild(chk)
+
+  row.appendChild(roleTd)
+  row.appendChild(nameTd)
+  row.appendChild(curTd)
+  row.appendChild(minTd)
+  row.appendChild(maxTd)
+  row.appendChild(plotTd)
+
+  return { row, roleTd, nameTd, curTd, minTd, maxTd, chk }
+}
+
 function _renderTelemetry() {
   const fmt = n => (typeof n === 'number' ? n.toFixed(3) : n)
   const selectedRole = telemFilter === 'both' ? null : parseInt(telemFilter, 10)
-  const sorted = Array.from(streams.values())
-    .filter(s => selectedRole == null || s.role === selectedRole)
+  const sorted = Array.from(streams.entries())
+    .filter(([, s]) => selectedRole == null || s.role === selectedRole)
     .sort((a, b) => {
-      const ra = a.role || 99
-      const rb = b.role || 99
+      const ra = a[1].role || 99
+      const rb = b[1].role || 99
       if (ra !== rb) return ra - rb
-      return a.name.localeCompare(b.name)
+      return a[1].name.localeCompare(b[1].name)
     })
 
   const frag = document.createDocumentFragment()
-  sorted.forEach(s => {
+  sorted.forEach(([key, s]) => {
     const roleLabel = s.role ? `SAT${s.role}` : 'SAT'
-    const key = `${s.role}:${s.name}`
     const checked = plotSelection.get(key) === true
-    const row = document.createElement('tr')
-    row.className = `telem-row role-${s.role || 0}`
+    let rowRefs = telemRows.get(key)
+    if (!rowRefs) {
+      rowRefs = _createTelemetryRow()
+      telemRows.set(key, rowRefs)
+    }
 
-    const roleTd = document.createElement('td')
-    roleTd.className = `role-chip role-${s.role || 0}`
-    roleTd.textContent = roleLabel
-    row.appendChild(roleTd)
-
-    const nameTd = document.createElement('td')
-    nameTd.textContent = s.name
-    row.appendChild(nameTd)
-
-    const curTd = document.createElement('td')
-    curTd.className = 'value-current'
-    curTd.textContent = fmt(s.current)
-    row.appendChild(curTd)
-
-    const minTd = document.createElement('td')
-    minTd.className = 'value-dim'
-    minTd.textContent = fmt(s.min)
-    row.appendChild(minTd)
-
-    const maxTd = document.createElement('td')
-    maxTd.className = 'value-dim'
-    maxTd.textContent = fmt(s.max)
-    row.appendChild(maxTd)
-
-    const plotTd = document.createElement('td')
-    const chk = document.createElement('input')
-    chk.type = 'checkbox'
-    chk.className = 'plot-toggle'
-    chk.dataset.streamKey = key
-    chk.checked = checked
-    plotTd.appendChild(chk)
-    row.appendChild(plotTd)
-
-    frag.appendChild(row)
+    rowRefs.row.className = `telem-row role-${s.role || 0}`
+    rowRefs.roleTd.className = `role-chip role-${s.role || 0}`
+    rowRefs.roleTd.textContent = roleLabel
+    rowRefs.nameTd.textContent = s.name
+    rowRefs.curTd.textContent = fmt(s.current)
+    rowRefs.minTd.textContent = fmt(s.min)
+    rowRefs.maxTd.textContent = fmt(s.max)
+    rowRefs.chk.dataset.streamKey = key
+    if (rowRefs.chk.checked !== checked) rowRefs.chk.checked = checked
+    frag.appendChild(rowRefs.row)
   })
   telemBody.replaceChildren(frag)
 }
@@ -372,9 +411,14 @@ function _colorForSeriesKey(key) {
 
 function _schedulePlotDraw() {
   if (_plotDrawScheduled || !plotCanvas) return
+  if (activeTab !== 'plotter') {
+    _plotDrawPending = true
+    return
+  }
   _plotDrawScheduled = true
   requestAnimationFrame(() => {
     _plotDrawScheduled = false
+    _plotDrawPending = false
     _drawPlot()
   })
 }
