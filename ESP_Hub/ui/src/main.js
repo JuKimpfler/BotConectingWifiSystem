@@ -44,6 +44,7 @@ let _plotDrawScheduled = false
 let _plotDrawPending = false
 let _telemRenderScheduled = false
 let _telemRenderPending = false
+let _telemRenderTimer = null
 let _lastTelemetryRenderTs = 0
 const telemRows = new Map() // key -> { row, roleTd, nameTd, curTd, minTd, maxTd, chk }
 
@@ -106,7 +107,13 @@ const peerList   = document.getElementById('peer-list')
 // ── Tab switching ─────────────────────────────────────────────
 const tabButtons = Array.from(document.querySelectorAll('.tab'))
 const tabPanels = Array.from(document.querySelectorAll('.tab-panel'))
-let activeTab = (tabButtons.find(t => t.classList.contains('active'))?.dataset.tab) || 'table'
+function _resolveInitialActiveTab() {
+  const activeBtnTab = tabButtons.find(t => t.classList.contains('active'))?.dataset.tab
+  if (activeBtnTab && document.getElementById(`tab-${activeBtnTab}`)) return activeBtnTab
+  const firstValidBtnTab = tabButtons.find(t => t.dataset.tab && document.getElementById(`tab-${t.dataset.tab}`))?.dataset.tab
+  return firstValidBtnTab || 'table'
+}
+let activeTab = _resolveInitialActiveTab()
 tabButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     if (btn.dataset.tab === activeTab) return
@@ -114,7 +121,7 @@ tabButtons.forEach(btn => {
     tabPanels.forEach(p => p.classList.remove('active'))
     btn.classList.add('active')
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active')
-    activeTab = btn.dataset.tab || activeTab
+    activeTab = btn.dataset.tab
     if (activeTab === 'table' && _telemRenderPending) _scheduleTelemetryRender(true)
     if (activeTab === 'plotter' && _plotDrawPending) _schedulePlotDraw(true)
   })
@@ -153,6 +160,11 @@ wsOn('ws_close', () => {
   plotSelection.clear()
   telemRows.clear()
   _telemRenderScheduled = false
+  _telemRenderPending = false
+  if (_telemRenderTimer) {
+    clearTimeout(_telemRenderTimer)
+    _telemRenderTimer = null
+  }
   telemBody.innerHTML = ''
   _updateLedIndicators()
   _schedulePlotDraw()
@@ -294,7 +306,13 @@ wsOn('telemetry', (msg) => {
 })
 
 function _scheduleTelemetryRender(force = false) {
-  if (_telemRenderScheduled) return
+  if (_telemRenderScheduled) {
+    if (!force) return
+    if (_telemRenderTimer) {
+      clearTimeout(_telemRenderTimer)
+      _telemRenderTimer = null
+    }
+  }
   if (!force && activeTab !== 'table') {
     _telemRenderPending = true
     return
@@ -302,7 +320,8 @@ function _scheduleTelemetryRender(force = false) {
   _telemRenderScheduled = true
   const now = performance.now()
   const delay = force ? 0 : Math.max(0, TELEMETRY_RENDER_MIN_INTERVAL_MS - (now - _lastTelemetryRenderTs))
-  window.setTimeout(() => {
+  _telemRenderTimer = setTimeout(() => {
+    _telemRenderTimer = null
     requestAnimationFrame(() => {
       _telemRenderScheduled = false
       _telemRenderPending = false
@@ -409,9 +428,9 @@ function _colorForSeriesKey(key) {
   return `hsl(${hue} 85% 58%)`
 }
 
-function _schedulePlotDraw() {
+function _schedulePlotDraw(force = false) {
   if (_plotDrawScheduled || !plotCanvas) return
-  if (activeTab !== 'plotter') {
+  if (!force && activeTab !== 'plotter') {
     _plotDrawPending = true
     return
   }
