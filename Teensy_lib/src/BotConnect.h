@@ -53,6 +53,10 @@ public:
     uint8_t switches = 0;
     uint8_t buttons  = 0;
     uint8_t start    = 0;
+    bool led1 = false;
+    bool led2 = false;
+    bool led3 = false;
+    bool led4 = false;
 
     // ── Initialisation ─────────────────────────────────────────
     // serial: the HardwareSerial connected to the ESP satellite
@@ -75,6 +79,8 @@ public:
     void sendTelemetryBool(const char *name, bool value);
     // Send a named string stream value
     void sendTelemetryString(const char *name, const char *value);
+    // Send all LED states (Led1..Led4) as telemetry update
+    void LedUpdate();
 
     // ── P2P communication ─────────────────────────────────────
     // Send a message to peer robot (via P2P bridge, no DBG: prefix)

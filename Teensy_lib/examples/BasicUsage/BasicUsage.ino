@@ -61,5 +61,10 @@ void loop() {
         BC.sendTelemetryFloat("BallDist",  120.0f);
         BC.sendTelemetryBool("Start",      BC.start != 0);
         BC.sendTelemetryBool("CtrlActive", BC.controlActive);
+        BC.led1 = BC.start != 0;
+        BC.led2 = BC.mode1;
+        BC.led3 = BC.mode2;
+        BC.led4 = BC.controlActive;
+        BC.LedUpdate();
     }
 }

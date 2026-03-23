@@ -51,9 +51,8 @@ export function wsConnect() {
     try {
       const msg = JSON.parse(evt.data)
       _emit(msg.type, msg)
-      _emit('raw', evt.data)
     } catch {
-      _emit('raw', evt.data)
+      // ignore non-JSON frames
     }
   }
 }

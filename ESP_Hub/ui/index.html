@@ -24,39 +24,47 @@
 
     <!-- Tab navigation -->
     <nav class="tabs">
-      <button class="tab active" data-tab="debug">Debug</button>
+      <button class="tab active" data-tab="table">Tabelle</button>
+      <button class="tab" data-tab="plotter">Plotter</button>
       <button class="tab" data-tab="manual">Manual</button>
       <button class="tab" data-tab="modes">Modes</button>
       <button class="tab" data-tab="calibrate">Calibrate</button>
       <button class="tab" data-tab="settings">Settings</button>
     </nav>
 
-    <!-- ── DEBUG ──────────────────────────────────────────── -->
-    <section id="tab-debug" class="tab-panel active">
-      <div class="panel-row">
-        <div class="panel flex-2">
-          <h2>Telemetry Streams</h2>
-          <div class="toolbar telem-toolbar">
-            <span class="toolbar-label">Anzeige:</span>
-            <button class="btn-target btn-telem-filter active" data-filter="1">SAT 1</button>
-            <button class="btn-target btn-telem-filter" data-filter="2">SAT 2</button>
-            <button class="btn-target btn-telem-filter" data-filter="both">Beide</button>
-          </div>
-          <table id="telem-table">
-            <thead>
-              <tr><th>Sat</th><th>Stream</th><th>Current</th><th>Min</th><th>Max</th></tr>
-            </thead>
-            <tbody id="telem-body"></tbody>
-          </table>
+    <!-- ── TABELLE ─────────────────────────────────────────── -->
+    <section id="tab-table" class="tab-panel active">
+      <div class="panel">
+        <h2>Telemetry Streams</h2>
+        <div class="toolbar telem-toolbar">
+          <span class="toolbar-label">Anzeige:</span>
+          <button class="btn-target btn-telem-filter active" data-filter="1">SAT 1</button>
+          <button class="btn-target btn-telem-filter" data-filter="2">SAT 2</button>
+          <button class="btn-target btn-telem-filter" data-filter="both">Beide</button>
         </div>
-        <div class="panel flex-1">
-          <h2>Raw Monitor</h2>
-          <div id="raw-monitor" class="monitor"></div>
-          <div class="toolbar">
-            <button id="monitor-clear">Clear</button>
-            <label><input type="checkbox" id="monitor-pause"> Pause</label>
-          </div>
+        <table id="telem-table">
+          <thead>
+            <tr><th>Sat</th><th>Stream</th><th>Current</th><th>Min</th><th>Max</th><th>Plot</th></tr>
+          </thead>
+          <tbody id="telem-body"></tbody>
+        </table>
+        <div class="led-grid">
+          <div class="led-item"><span>LED 1</span><span id="dbg-led-1" class="led-dot"></span></div>
+          <div class="led-item"><span>LED 2</span><span id="dbg-led-2" class="led-dot"></span></div>
+          <div class="led-item"><span>LED 3</span><span id="dbg-led-3" class="led-dot"></span></div>
+          <div class="led-item"><span>LED 4</span><span id="dbg-led-4" class="led-dot"></span></div>
         </div>
+      </div>
+    </section>
+
+    <!-- ── PLOTTER ─────────────────────────────────────────── -->
+    <section id="tab-plotter" class="tab-panel">
+      <div class="panel">
+        <h2>Live Plotter</h2>
+        <div class="plotter-wrap">
+          <canvas id="telem-plot" width="980" height="320"></canvas>
+        </div>
+        <div id="plot-legend" class="plot-legend"></div>
       </div>
     </section>
 
