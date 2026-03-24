@@ -127,6 +127,10 @@ static bool sendTelemetryDict(uint8_t streamId) {
 }
 
 static uint32_t telemetryFlushIntervalMs(uint8_t pendingValues) {
+    // Keep latency very low for sparse telemetry (small queue), but when many
+    // values are pending we wait a bit longer to increase packing efficiency.
+    // This balances "max update rate at low load" with better airtime usage.
+    // Return value unit: milliseconds.
     if (pendingValues <= 1) return 6;   // very low load -> highest update rate
     if (pendingValues <= 3) return 10;
     if (pendingValues <= 6) return 16;
@@ -307,7 +311,7 @@ static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
         flushTelemetryQueue(true);
         if (g_telemQueueLen >= TELEM_BATCH_MAX_VALUES) return true;
     }
-    TelemetryCompactValue_t &v = g_telemQueue[g_telemQueueLen++];
+    TelemetryCompactValue_t &v = g_telemQueue[g_telemQueueLen];
     v.stream_id = (uint8_t)streamIdx;
     v.vtype = telem.vtype;
     if (telem.vtype == 0) {
@@ -317,6 +321,7 @@ static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     } else {
         v.raw = telem.value.b ? 1 : 0;
     }
+    g_telemQueueLen++;
     bool sent = flushTelemetryQueue(false);
 
     if (g_monitorMode == MONITOR_BRIDGE) {

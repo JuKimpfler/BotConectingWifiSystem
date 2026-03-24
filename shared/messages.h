@@ -79,8 +79,11 @@ typedef struct {
 } Frame_t;
 
 // ── Compact DBG telemetry payload (stream entry) ────────────
+#define TELEM_NAME_MAX_LEN       16
+#define TELEM_BATCH_MAX_VALUES   16
+
 typedef struct {
-    char     name[16];    // Stream name (null-terminated)
+    char     name[TELEM_NAME_MAX_LEN];  // Stream name (null-terminated)
     uint8_t  vtype;       // 0=int32, 1=float, 2=bool, 3=string
     union {
         int32_t  i32;
@@ -90,9 +93,6 @@ typedef struct {
     } value;
     uint32_t ts_ms;       // Timestamp millis()
 } TelemetryEntry_t;
-
-#define TELEM_NAME_MAX_LEN       16
-#define TELEM_BATCH_MAX_VALUES   16
 
 typedef struct {
     uint8_t stream_id;     // 0..255 telemetry stream ID (per source role)
