@@ -56,9 +56,13 @@ int main() {
     CHECK(sizeof(HeartbeatPayload_t) <=  FRAME_MAX_PAYLOAD, "HeartbeatPayload fits");
     CHECK(sizeof(AckPayload_t)       <=  FRAME_MAX_PAYLOAD, "AckPayload fits");
     CHECK(sizeof(TelemetryEntry_t)   <=  FRAME_MAX_PAYLOAD, "TelemetryEntry fits");
+    CHECK(sizeof(TelemetryDictPayload_t) <= FRAME_MAX_PAYLOAD, "TelemetryDictPayload fits");
+    CHECK(sizeof(TelemetryCompactValue_t) <= FRAME_MAX_PAYLOAD, "TelemetryCompactValue fits");
     CHECK(sizeof(PairPayload_t)      <=  FRAME_MAX_PAYLOAD, "PairPayload fits");
     CHECK(sizeof(DiscoveryPayload_t) <=  FRAME_MAX_PAYLOAD, "DiscoveryPayload fits");
     CHECK(sizeof(SettingsPayload_t)  <=  FRAME_MAX_PAYLOAD, "SettingsPayload fits");
+    CHECK((TELEM_BATCH_MAX_VALUES * sizeof(TelemetryCompactValue_t)) <= FRAME_MAX_PAYLOAD,
+          "Max compact telemetry batch fits frame payload");
 
     // Frame total size stays within ESP-NOW 250 B limit
     uint16_t maxFrame = FRAME_HEADER_SIZE + FRAME_MAX_PAYLOAD + 2;

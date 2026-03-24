@@ -28,6 +28,8 @@
 #define MSG_SETTINGS        0x09  // Settings update (ACK required)
 #define MSG_DISCOVERY       0x0A  // Peer discovery broadcast
 #define MSG_UART_RAW        0x0B  // Transparent UART bridge data (SAT1 <-> SAT2, no ACK)
+#define MSG_TELEM_DICT      0x0C  // Telemetry dictionary update (stream_id -> name)
+#define MSG_TELEM_BATCH     0x0D  // Compact telemetry batch (ID + value pairs)
 
 // ── Flag bits ───────────────────────────────────────────────
 #define FLAG_ACK_REQ        0x01  // Sender requests ACK
@@ -88,6 +90,20 @@ typedef struct {
     } value;
     uint32_t ts_ms;       // Timestamp millis()
 } TelemetryEntry_t;
+
+#define TELEM_NAME_MAX_LEN       16
+#define TELEM_BATCH_MAX_VALUES   16
+
+typedef struct {
+    uint8_t stream_id;     // 0..255 telemetry stream ID (per source role)
+    char    name[TELEM_NAME_MAX_LEN];
+} TelemetryDictPayload_t;
+
+typedef struct {
+    uint8_t stream_id;     // Stream ID previously announced via MSG_TELEM_DICT
+    uint8_t vtype;         // 0=int32, 1=float, 2=bool
+    int32_t raw;           // int32 value or float bit-pattern
+} TelemetryCompactValue_t;
 
 // ── CTRL payload ─────────────────────────────────────────────
 typedef struct {

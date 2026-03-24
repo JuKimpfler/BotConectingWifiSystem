@@ -101,6 +101,14 @@ int main() {
     CHECK(tf->vtype == 1, "Float telemetry type = 1");
     CHECK(tf->value.f32 > 3.1f && tf->value.f32 < 3.2f, "Float value ~3.14");
 
+    // ── uartLineToEntry: compact parser path ─────────────────
+    TelemetryEntry_t parsed = {};
+    ok = p.uartLineToEntry("DBG:Battery=12.5", &parsed);
+    CHECK(ok, "uartLineToEntry parses telemetry");
+    CHECK(strcmp(parsed.name, "Battery") == 0, "uartLineToEntry name");
+    CHECK(parsed.vtype == 1, "uartLineToEntry float type");
+    CHECK(parsed.value.f32 > 12.4f && parsed.value.f32 < 12.6f, "uartLineToEntry float value");
+
     // ── uartLineToFrame: legacy DBG1:/DBG2: prefixes rejected ─
     ok = p.uartLineToFrame("DBG1:Speed=200", 1, &tFrame);
     CHECK(!ok, "uartLineToFrame rejects legacy DBG1: prefix");

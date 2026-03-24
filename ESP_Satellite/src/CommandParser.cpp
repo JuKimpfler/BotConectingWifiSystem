@@ -41,38 +41,8 @@ int CommandParser::hubFrameToUart(const Frame_t *frame, char *outBuf, int maxLen
 // ─── Teensy UART line → hub telemetry frame ──────────────────
 bool CommandParser::uartLineToFrame(const char *line, uint8_t satId,
                                     Frame_t *outFrame) {
-    // Lines from Teensy with DBG: prefix carry telemetry data
-    // Format: "DBG:<name>=<value>"
-    const char *prefix = DBG_PREFIX;
-    size_t prefixLen = strlen(prefix);
-
-    if (strncmp(line, prefix, prefixLen) != 0) return false;
-    const char *payload = line + prefixLen;
-
-    // Parse "name=value"
-    const char *eq = strchr(payload, '=');
-    if (!eq) return false;
-
     TelemetryEntry_t entry = {};
-    size_t nameLen = eq - payload;
-    if (nameLen == 0) return false;  // reject empty names
-    if (nameLen >= sizeof(entry.name)) nameLen = sizeof(entry.name) - 1;
-    memcpy(entry.name, payload, nameLen);
-    entry.name[nameLen] = '\0';
-
-    const char *valStr = eq + 1;
-    // Try int, then float
-    char *end = nullptr;
-    long ival = strtol(valStr, &end, 10);
-    if (end != valStr && (*end == '\0' || *end == '\r' || *end == '\n')) {
-        entry.vtype    = 0;
-        entry.value.i32 = (int32_t)ival;
-    } else {
-        float fval = strtof(valStr, &end);
-        entry.vtype    = 1;
-        entry.value.f32 = fval;
-    }
-    entry.ts_ms = millis();
+    if (!uartLineToEntry(line, &entry)) return false;
 
     // Build frame
     memset(outFrame, 0, sizeof(Frame_t));
@@ -88,6 +58,43 @@ bool CommandParser::uartLineToFrame(const char *line, uint8_t satId,
     uint16_t crc = crc16_buf((const uint8_t *)outFrame, FRAME_HEADER_SIZE + outFrame->len);
     memcpy(outFrame->payload + outFrame->len, &crc, 2);
 
+    return true;
+}
+
+bool CommandParser::uartLineToEntry(const char *line, TelemetryEntry_t *outEntry) {
+    if (!line || !outEntry) return false;
+    // Lines from Teensy with DBG: prefix carry telemetry data
+    // Format: "DBG:<name>=<value>"
+    const char *prefix = DBG_PREFIX;
+    size_t prefixLen = strlen(prefix);
+
+    if (strncmp(line, prefix, prefixLen) != 0) return false;
+    const char *payload = line + prefixLen;
+
+    // Parse "name=value"
+    const char *eq = strchr(payload, '=');
+    if (!eq) return false;
+
+    size_t nameLen = eq - payload;
+    if (nameLen == 0) return false;  // reject empty names
+    if (nameLen >= sizeof(outEntry->name)) nameLen = sizeof(outEntry->name) - 1;
+    memset(outEntry, 0, sizeof(TelemetryEntry_t));
+    memcpy(outEntry->name, payload, nameLen);
+    outEntry->name[nameLen] = '\0';
+
+    const char *valStr = eq + 1;
+    // Try int, then float
+    char *end = nullptr;
+    long ival = strtol(valStr, &end, 10);
+    if (end != valStr && (*end == '\0' || *end == '\r' || *end == '\n')) {
+        outEntry->vtype    = 0;
+        outEntry->value.i32 = (int32_t)ival;
+    } else {
+        float fval = strtof(valStr, &end);
+        outEntry->vtype    = 1;
+        outEntry->value.f32 = fval;
+    }
+    outEntry->ts_ms = millis();
     return true;
 }
 

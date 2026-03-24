@@ -25,6 +25,19 @@ static void parseUiLabels(const JsonDocument &doc, const char *key, char labels[
     }
 }
 
+static void compactValueToTelemetryEntry(const TelemetryCompactValue_t *src,
+                                         const char *name,
+                                         TelemetryEntry_t *dst) {
+    if (!src || !name || !dst) return;
+    memset(dst, 0, sizeof(TelemetryEntry_t));
+    strlcpy(dst->name, name, sizeof(dst->name));
+    dst->vtype = src->vtype;
+    if (dst->vtype == 0) dst->value.i32 = src->raw;
+    else if (dst->vtype == 1) memcpy(&dst->value.f32, &src->raw, sizeof(dst->value.f32));
+    else dst->value.b = (src->raw != 0) ? 1 : 0;
+    dst->ts_ms = millis();
+}
+
 void CommandRouter::begin(AsyncWebSocket *ws, EspNowManager *espnow,
                           PeerRegistry *peers, TelemetryBuffer *telem,
                           ConfigStore *cfgStore, HubConfig *hubCfg) {
@@ -75,6 +88,28 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
     }
 
     switch (frame->msg_type) {
+    case MSG_TELEM_DICT: {
+        if (frame->len < sizeof(TelemetryDictPayload_t)) break;
+        const TelemetryDictPayload_t *dict =
+            reinterpret_cast<const TelemetryDictPayload_t *>(frame->payload);
+        _upsertDictName(frame->src_role, dict->stream_id, dict->name);
+        break;
+    }
+    case MSG_TELEM_BATCH: {
+        if (frame->len == 0 || (frame->len % sizeof(TelemetryCompactValue_t)) != 0) break;
+        const uint8_t count = frame->len / sizeof(TelemetryCompactValue_t);
+        const TelemetryCompactValue_t *vals =
+            reinterpret_cast<const TelemetryCompactValue_t *>(frame->payload);
+        for (uint8_t i = 0; i < count; i++) {
+            const char *name = _dictNameFor(frame->src_role, vals[i].stream_id);
+            if (!name) continue;
+            TelemetryEntry_t entry = {};
+            compactValueToTelemetryEntry(&vals[i], name, &entry);
+            _telem->ingest(&entry, frame->src_role);
+        }
+        _peers->markDataOk(mac);
+        break;
+    }
     case MSG_DBG: {
         const TelemetryEntry_t *entry =
             reinterpret_cast<const TelemetryEntry_t *>(frame->payload);
@@ -477,4 +512,32 @@ void CommandRouter::_buildAndSend(uint8_t role, uint8_t msgType,
     Serial.printf("[ROUTER] tx type=0x%02X seq=%u -> role=%u (%s)\n",
                   msgType, frame.seq, role, peer->name);
     _espnow->send(peer->mac, &frame);
+}
+
+const char *CommandRouter::_dictNameFor(uint8_t role, uint8_t streamId) const {
+    for (int i = 0; i < (int)(sizeof(_telemDict) / sizeof(_telemDict[0])); i++) {
+        const TelemetryDictEntry &entry = _telemDict[i];
+        if (entry.used && entry.role == role && entry.stream_id == streamId) {
+            return entry.name;
+        }
+    }
+    return nullptr;
+}
+
+void CommandRouter::_upsertDictName(uint8_t role, uint8_t streamId, const char *name) {
+    if (!name || name[0] == '\0') return;
+    TelemetryDictEntry *freeSlot = nullptr;
+    for (int i = 0; i < (int)(sizeof(_telemDict) / sizeof(_telemDict[0])); i++) {
+        TelemetryDictEntry &entry = _telemDict[i];
+        if (entry.used && entry.role == role && entry.stream_id == streamId) {
+            strlcpy(entry.name, name, sizeof(entry.name));
+            return;
+        }
+        if (!entry.used && !freeSlot) freeSlot = &entry;
+    }
+    if (!freeSlot) return;
+    freeSlot->used = true;
+    freeSlot->role = role;
+    freeSlot->stream_id = streamId;
+    strlcpy(freeSlot->name, name, sizeof(freeSlot->name));
 }

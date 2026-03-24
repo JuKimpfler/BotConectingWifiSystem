@@ -27,6 +27,7 @@ public:
     // Returns true if the line produced a telemetry frame to send to hub
     bool uartLineToFrame(const char *line, uint8_t satId,
                          Frame_t *outFrame);
+    bool uartLineToEntry(const char *line, TelemetryEntry_t *outEntry);
 
 private:
     void _buildCtrlCmd(const CtrlPayload_t *ctrl, char *buf, int max);
