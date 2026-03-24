@@ -55,9 +55,115 @@ static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static uint32_t g_lastP2pLedBlink = 0;
 static uint32_t g_lastP2pDataFlow = 0;
 static bool     g_p2pLedBlinkState = false;
+#define SAT_TELEM_MAX_STREAMS 32
+
+struct TelemetryStreamMapEntry {
+    char    name[TELEM_NAME_MAX_LEN];
+    uint8_t id;
+    bool    used;
+    bool    announced;
+};
+
+static TelemetryStreamMapEntry g_telemStreamMap[SAT_TELEM_MAX_STREAMS] = {};
+static uint8_t g_telemStreamCount = 0;
+static TelemetryCompactValue_t g_telemQueue[TELEM_BATCH_MAX_VALUES] = {};
+static uint8_t g_telemQueueLen = 0;
+static uint32_t g_lastTelemFlush = 0;
 
 static void markP2pDataFlow() {
     g_lastP2pDataFlow = millis();
+}
+
+static int findTelemetryStreamByName(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    for (int i = 0; i < g_telemStreamCount; i++) {
+        if (g_telemStreamMap[i].used &&
+            strncmp(g_telemStreamMap[i].name, name, sizeof(g_telemStreamMap[i].name)) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int ensureTelemetryStream(const char *name) {
+    int idx = findTelemetryStreamByName(name);
+    if (idx >= 0) return idx;
+    if (g_telemStreamCount >= SAT_TELEM_MAX_STREAMS) return -1;
+    idx = g_telemStreamCount++;
+    memset(&g_telemStreamMap[idx], 0, sizeof(g_telemStreamMap[idx]));
+    g_telemStreamMap[idx].used = true;
+    g_telemStreamMap[idx].id   = (uint8_t)idx;
+    strlcpy(g_telemStreamMap[idx].name, name, sizeof(g_telemStreamMap[idx].name));
+    return idx;
+}
+
+static bool sendTelemetryDict(uint8_t streamId) {
+    if (!g_hubKnown) return false;
+    if (streamId >= g_telemStreamCount) return false;
+    TelemetryStreamMapEntry *entry = &g_telemStreamMap[streamId];
+    if (!entry->used || entry->announced) return true;
+
+    TelemetryDictPayload_t dict = {};
+    dict.stream_id = streamId;
+    strlcpy(dict.name, entry->name, sizeof(dict.name));
+
+    Frame_t frame = {};
+    frame.magic      = FRAME_MAGIC;
+    frame.msg_type   = MSG_TELEM_DICT;
+    frame.seq        = g_seq++;
+    frame.src_role   = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    frame.dst_role   = ROLE_HUB;
+    frame.flags      = 0;
+    frame.network_id = ESPNOW_NETWORK_ID;
+    frame.len        = sizeof(dict);
+    memcpy(frame.payload, &dict, sizeof(dict));
+
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+    memcpy(frame.payload + frame.len, &crc, 2);
+
+    bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
+    if (ok) entry->announced = true;
+    return ok;
+}
+
+static uint32_t telemetryFlushIntervalMs(uint8_t pendingValues) {
+    // Keep latency very low for sparse telemetry (small queue), but when many
+    // values are pending we wait a bit longer to increase packing efficiency.
+    // This balances "max update rate at low load" with better airtime usage.
+    // Return value unit: milliseconds.
+    if (pendingValues <= 1) return 6;   // very low load -> highest update rate
+    if (pendingValues <= 3) return 10;
+    if (pendingValues <= 6) return 16;
+    if (pendingValues <= 10) return 24;
+    return 32;
+}
+
+static bool flushTelemetryQueue(bool force) {
+    if (!g_hubKnown || g_telemQueueLen == 0) return false;
+    uint32_t now = millis();
+    uint32_t minInterval = telemetryFlushIntervalMs(g_telemQueueLen);
+    if (!force && (uint32_t)(now - g_lastTelemFlush) < minInterval) return false;
+
+    Frame_t frame = {};
+    frame.magic      = FRAME_MAGIC;
+    frame.msg_type   = MSG_TELEM_BATCH;
+    frame.seq        = g_seq++;
+    frame.src_role   = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    frame.dst_role   = ROLE_HUB;
+    frame.flags      = 0;
+    frame.network_id = ESPNOW_NETWORK_ID;
+    frame.len        = g_telemQueueLen * sizeof(TelemetryCompactValue_t);
+    memcpy(frame.payload, g_telemQueue, frame.len);
+
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
+    memcpy(frame.payload + frame.len, &crc, 2);
+
+    bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
+    if (ok) {
+        g_telemQueueLen = 0;
+        g_lastTelemFlush = now;
+    }
+    return ok;
 }
 
 // ─── USB serial command handler ──────────────────────────────
@@ -185,28 +291,43 @@ static void sendPeerDiscovery() {
 
 static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel) return false;
-    Frame_t frame;
-    if (!parser.uartLineToFrame(line, SAT_ID, &frame)) return false;
-    uint8_t seq = g_seq++;
-    frame.seq        = seq;
-    frame.network_id = ESPNOW_NETWORK_ID;
-    // Recompute CRC after assigning the final sequence number and network_id
-    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
-    memcpy(frame.payload + frame.len, &crc, 2);
+    TelemetryEntry_t telem = {};
+    if (!parser.uartLineToEntry(line, &telem)) return false;
 
-    if (g_hubKnown) {
-        bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
-        if (g_monitorMode == MONITOR_BRIDGE) {
-            USB_DEBUG_PRINTF("[SAT%d] %s DBG '", SAT_ID, srcLabel);
-            USB_DEBUG_PRINT(line);
-            USB_DEBUG_PRINTF("' -> hub %s\n", ok ? "ok" : "fail");
-        }
-    } else {
+    if (!g_hubKnown) {
         if (g_monitorMode == MONITOR_BRIDGE || g_monitorMode == MONITOR_STATUS) {
             USB_DEBUG_PRINTF("[SAT%d] %s DBG '", SAT_ID, srcLabel);
             USB_DEBUG_PRINT(line);
             USB_DEBUG_PRINTLN("' – hub unknown, dropped");
         }
+        return true;
+    }
+
+    int streamIdx = ensureTelemetryStream(telem.name);
+    if (streamIdx < 0) return true;
+    if (!sendTelemetryDict((uint8_t)streamIdx)) return true;
+
+    if (g_telemQueueLen >= TELEM_BATCH_MAX_VALUES) {
+        flushTelemetryQueue(true);
+        if (g_telemQueueLen >= TELEM_BATCH_MAX_VALUES) return true;
+    }
+    TelemetryCompactValue_t &v = g_telemQueue[g_telemQueueLen];
+    v.stream_id = (uint8_t)streamIdx;
+    v.vtype = telem.vtype;
+    if (telem.vtype == 0) {
+        v.raw = telem.value.i32;
+    } else if (telem.vtype == 1) {
+        memcpy(&v.raw, &telem.value.f32, sizeof(v.raw));
+    } else {
+        v.raw = telem.value.b ? 1 : 0;
+    }
+    g_telemQueueLen++;
+    bool sent = flushTelemetryQueue(false);
+
+    if (g_monitorMode == MONITOR_BRIDGE) {
+        USB_DEBUG_PRINTF("[SAT%d] %s DBG '", SAT_ID, srcLabel);
+        USB_DEBUG_PRINT(line);
+        USB_DEBUG_PRINTF("' -> compact queue=%u sent=%s\n", g_telemQueueLen, sent ? "yes" : "no");
     }
     // DBG lines are NOT forwarded to peer satellite – they are hub-only telemetry
     return true;
@@ -473,6 +594,8 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     }
 
     case MSG_DBG:
+    case MSG_TELEM_DICT:
+    case MSG_TELEM_BATCH:
         // Telemetry from peer satellite – forward to hub if available
         if (g_hubKnown) {
             EspNowBridge::instance().send(g_hubMac, frame);
@@ -671,6 +794,9 @@ void loop() {
     ackMgr.tick([](const uint8_t *mac, const Frame_t *frame) -> bool {
         return EspNowBridge::instance().send(mac, frame);
     });
+
+    // ── Telemetry flush tick (adaptive based on queued values) ─
+    flushTelemetryQueue(false);
 
     // ── Peer recovery tick (re-register peers after fail-streak) ─
     EspNowBridge::instance().tick();

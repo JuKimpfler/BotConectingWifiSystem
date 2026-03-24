@@ -31,12 +31,20 @@ public:
     void broadcastPeerStatus();
 
 private:
+    struct TelemetryDictEntry {
+        uint8_t role;
+        uint8_t stream_id;
+        char    name[TELEM_NAME_MAX_LEN];
+        bool    used;
+    };
+
     AsyncWebSocket  *_ws       = nullptr;
     EspNowManager   *_espnow   = nullptr;
     PeerRegistry    *_peers    = nullptr;
     TelemetryBuffer *_telem    = nullptr;
     ConfigStore     *_cfgStore = nullptr;
     HubConfig       *_hubCfg   = nullptr;
+    TelemetryDictEntry _telemDict[TELEM_MAX_STREAMS * 2] = {};
 
     uint8_t _seq = 0;
 
@@ -53,4 +61,6 @@ private:
     void _buildAndSend(uint8_t role, uint8_t msgType,
                        const uint8_t *payload, uint8_t payLen,
                        uint8_t flags = 0);
+    const char *_dictNameFor(uint8_t role, uint8_t streamId) const;
+    void _upsertDictName(uint8_t role, uint8_t streamId, const char *name);
 };
