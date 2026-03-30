@@ -6,6 +6,7 @@
 - Kommandos empfangen (Control/Mode/Calibrate)
 - Telemetrie senden (`DBG:`-basierte Streams)
 - P2P-Nachrichten senden/empfangen
+- optional auch per I2C für SAT↔Hub-Daten (Satellite als Slave, Default-Adresse `0x03`)
 
 ---
 
@@ -43,7 +44,33 @@ Wichtig:
 
 ---
 
-## 3. API-Kernfunktionen
+## 3. I2C-Integration (SAT-Hub-Daten)
+
+Für SAT↔Hub-Daten kann alternativ `BotConnect_i2C` genutzt werden.
+Der Satellite läuft dabei als I2C-Slave auf Adresse `0x03`, der Teensy ist Master.
+
+```cpp
+#include <Wire.h>
+#include "BotConnect.h"
+
+void setup() {
+  Wire.begin();                 // Teensy als I2C-Master
+  BC_I2C.begin(Wire, 0x03);     // Standard-Adresse Satellite
+}
+
+void loop() {
+  BC_I2C.process();             // holt Ctrl/Mode/Cal vom Satellite
+  BC_I2C.sendTelemetryInt("Mode", 1);
+}
+```
+
+Es ist möglich, **I2C und UART parallel** zu verwenden:
+- `BC_I2C` für SAT↔Hub-Informationen (Telemetry, Control/Mode/Calib)
+- `BC` weiter für UART-basierte P2P-Nachrichten
+
+---
+
+## 4. API-Kernfunktionen
 
 Callbacks:
 - `onControl(...)`
@@ -63,14 +90,14 @@ P2P:
 
 ---
 
-## 4. UART/Format-Hinweis
+## 5. UART/Format-Hinweis
 
 - Telemetrie wird als `DBG:<name>=<value>` weitergegeben
 - Nicht-DBG-Zeilen können als transparente P2P-Nutzdaten zwischen den Satelliten laufen
 
 ---
 
-## 5. Typische Fehler
+## 6. Typische Fehler
 
 - Keine Befehle: TX/RX falsch oder kein gemeinsames GND
 - Keine Telemetrie in UI: kein `DBG:`-Output / `process()` fehlt

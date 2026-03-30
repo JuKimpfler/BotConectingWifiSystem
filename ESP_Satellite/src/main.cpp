@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include <ctype.h>
 #include <Preferences.h>
+#include <Wire.h>
 #include "sat_config.h"
 #include "messages.h"
 #include "crc16.h"
@@ -56,6 +57,16 @@ static uint32_t g_lastP2pLedBlink = 0;
 static uint32_t g_lastP2pDataFlow = 0;
 static bool     g_p2pLedBlinkState = false;
 #define SAT_TELEM_MAX_STREAMS 32
+static char s_i2cRxLine[I2C_LINE_BUF_SIZE];
+static uint8_t s_i2cRxIdx = 0;
+static bool s_i2cRxOverflow = false;
+static char s_i2cPendingLine[I2C_LINE_BUF_SIZE];
+static volatile bool s_i2cLineReady = false;
+static char s_i2cTxQueue[I2C_QUEUE_SIZE][I2C_LINE_BUF_SIZE];
+static volatile uint8_t s_i2cTxHead = 0;
+static volatile uint8_t s_i2cTxCount = 0;
+static portMUX_TYPE s_i2cQueueMux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE s_i2cPendingMux = portMUX_INITIALIZER_UNLOCKED;
 
 struct TelemetryStreamMapEntry {
     char    name[TELEM_NAME_MAX_LEN];
@@ -378,6 +389,63 @@ static bool routePayloadLine(const char *line, const char *srcLabel) {
     return forwardUartRawToPeer(line);
 }
 
+static void enqueueI2cTxLine(const char *line) {
+    if (!line || line[0] == '\0') return;
+    portENTER_CRITICAL(&s_i2cQueueMux);
+    uint8_t insertIdx = (uint8_t)((s_i2cTxHead + s_i2cTxCount) % I2C_QUEUE_SIZE);
+    if (s_i2cTxCount == I2C_QUEUE_SIZE) {
+        s_i2cTxHead = (uint8_t)((s_i2cTxHead + 1) % I2C_QUEUE_SIZE);
+        s_i2cTxCount--;
+    }
+    strlcpy(s_i2cTxQueue[insertIdx], line, I2C_LINE_BUF_SIZE);
+    s_i2cTxCount++;
+    portEXIT_CRITICAL(&s_i2cQueueMux);
+}
+
+static void onI2cReceive(int numBytes) {
+    (void)numBytes;
+    while (Wire.available()) {
+        char c = (char)Wire.read();
+        if (c == '\n' || c == '\r') {
+            if (!s_i2cRxOverflow && s_i2cRxIdx > 0 && !s_i2cLineReady) {
+                s_i2cRxLine[s_i2cRxIdx] = '\0';
+                portENTER_CRITICAL_ISR(&s_i2cPendingMux);
+                strlcpy(s_i2cPendingLine, s_i2cRxLine, sizeof(s_i2cPendingLine));
+                s_i2cLineReady = true;
+                portEXIT_CRITICAL_ISR(&s_i2cPendingMux);
+            }
+            s_i2cRxIdx = 0;
+            s_i2cRxOverflow = false;
+        } else if (s_i2cRxOverflow) {
+            continue;
+        } else if (s_i2cRxIdx < (uint8_t)(sizeof(s_i2cRxLine) - 1)) {
+            s_i2cRxLine[s_i2cRxIdx++] = c;
+        } else {
+            s_i2cRxOverflow = true;
+            s_i2cRxIdx = 0;
+        }
+    }
+}
+
+static void onI2cRequest() {
+    portENTER_CRITICAL_ISR(&s_i2cQueueMux);
+    if (s_i2cTxCount == 0) {
+        static const char noData[] = "NODATA\n";
+        Wire.write((const uint8_t *)noData, sizeof(noData) - 1);
+        portEXIT_CRITICAL_ISR(&s_i2cQueueMux);
+        return;
+    }
+    const char *line = s_i2cTxQueue[s_i2cTxHead];
+    size_t len = strnlen(line, I2C_LINE_BUF_SIZE);
+    if (len > 0) {
+        Wire.write((const uint8_t *)line, len);
+        Wire.write((uint8_t)'\n');
+    }
+    s_i2cTxHead = (uint8_t)((s_i2cTxHead + 1) % I2C_QUEUE_SIZE);
+    s_i2cTxCount--;
+    portEXIT_CRITICAL_ISR(&s_i2cQueueMux);
+}
+
 static void updateStatusLeds(uint32_t now) {
     // WBS connected LED (D10): on when hub is online
     digitalWrite(PIN_LED_WBS_CONNECTED, g_hubOnline ? HIGH : LOW);
@@ -557,6 +625,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
         char uartBuf[128];
         int n = parser.hubFrameToUart(frame, uartBuf, sizeof(uartBuf));
         if (n > 0) {
+            enqueueI2cTxLine(uartBuf);
 #ifdef UART_BRIDGE_USB
             // USB-only mode: route command output directly via USB (no debug prefix)
             Serial.print(uartBuf);
@@ -701,6 +770,9 @@ void setup() {
     pinMode(PIN_LED_P2P_CONNECTED, OUTPUT);
     digitalWrite(PIN_LED_WBS_CONNECTED, LOW);
     digitalWrite(PIN_LED_P2P_CONNECTED, LOW);
+    Wire.begin(SAT_I2C_ADDRESS);
+    Wire.onReceive(onI2cReceive);
+    Wire.onRequest(onI2cRequest);
 
 #ifdef UART_BRIDGE_USB
     USB_DEBUG_PRINTF("[SAT%d] *** UART_BRIDGE_USB active – HW UART pins disabled ***\n", SAT_ID);
@@ -728,6 +800,19 @@ void setup() {
 // ─── Loop ─────────────────────────────────────────────────────
 void loop() {
     uint32_t now = millis();
+
+    bool hasI2cLine = false;
+    char line[I2C_LINE_BUF_SIZE];
+    portENTER_CRITICAL(&s_i2cPendingMux);
+    if (s_i2cLineReady) {
+        strlcpy(line, s_i2cPendingLine, sizeof(line));
+        s_i2cLineReady = false;
+        hasI2cLine = true;
+    }
+    portEXIT_CRITICAL(&s_i2cPendingMux);
+    if (hasI2cLine) {
+        routePayloadLine(line, "I2C");
+    }
 
     // ── Read from Teensy UART ──────────────────────────────────
 #ifndef UART_BRIDGE_USB

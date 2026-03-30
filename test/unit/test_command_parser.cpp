@@ -55,6 +55,7 @@ int main() {
     n = p.hubFrameToUart(&modeFrame, outBuf, sizeof(outBuf));
     CHECK(n > 0, "hubFrameToUart MODE produces output");
     CHECK(strstr(outBuf, "M3") != nullptr, "MODE output is 'M3'");
+    CHECK(outBuf[n - 1] == '\n', "MODE output is newline terminated");
 
     // ── hubFrameToUart: CAL ───────────────────────────────────
     CalPayload_t cal = {CAL_IR_MAX, ROLE_SAT1};
@@ -66,6 +67,7 @@ int main() {
     n = p.hubFrameToUart(&calFrame, outBuf, sizeof(outBuf));
     CHECK(n > 0, "hubFrameToUart CAL produces output");
     CHECK(strstr(outBuf, "CAL_IR_MAX") != nullptr, "CAL output is 'CAL_IR_MAX'");
+    CHECK(outBuf[n - 1] == '\n', "CAL output is newline terminated");
 
     // ── hubFrameToUart: CAL invalid cmd produces empty string ─
     CalPayload_t calInvalid = {0, ROLE_SAT1};

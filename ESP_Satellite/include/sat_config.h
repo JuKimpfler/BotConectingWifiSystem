@@ -20,6 +20,7 @@
 #define HW_UART_RX_PIN       20   // D7 on XIAO ESP32-C3
 #define HW_UART_TX_PIN       21   // D6 on XIAO ESP32-C3
 #define HW_UART_BAUD         115200
+#define SAT_I2C_ADDRESS      0x03 // Satellite is I2C slave, Teensy is master
 
 // ── ESP-NOW ───────────────────────────────────────────────────
 #define DEFAULT_CHANNEL      6
@@ -38,6 +39,8 @@
 // ── UART buffer ───────────────────────────────────────────────
 #define UART_RX_BUF_SIZE     512
 #define UART_TX_BUF_SIZE     256
+#define I2C_LINE_BUF_SIZE    128
+#define I2C_QUEUE_SIZE       8
 
 // ── DBG prefix for Teensy communication ──────────────────────
 // Prefixes are defined in shared/messages.h (DBG_PREFIX_SAT1/SAT2)
