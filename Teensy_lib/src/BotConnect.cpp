@@ -10,6 +10,9 @@
 
 BotConnect BC;
 BotConnect_i2C BC_I2C;
+static const uint32_t CTRL_ACTIVE_TIMEOUT_MS = 500;
+static const uint8_t I2C_READ_CHUNK_SIZE = 32;
+static const uint32_t I2C_REQUEST_INTERVAL_MS = 2;
 
 void BotConnect::begin(HardwareSerial &serial, uint8_t satId) {
     _serial = &serial;
@@ -45,7 +48,7 @@ void BotConnect::process() {
     }
 
     // Update controlActive: true while a ctrl command was received within 500 ms
-    if (_ctrlReceived && (millis() - _lastCtrlMs < 500)) {
+    if (_ctrlReceived && (millis() - _lastCtrlMs < CTRL_ACTIVE_TIMEOUT_MS)) {
         controlActive = true;
     } else {
         controlActive = false;
@@ -243,7 +246,12 @@ void BotConnect_i2C::begin(TwoWire &wire, uint8_t address) {
 
 void BotConnect_i2C::process() {
     if (!_wire) return;
-    _wire->requestFrom((int)_address, (int)sizeof(_rxBuf) - 1);
+    static uint32_t s_lastI2cPollMs = 0;
+    uint32_t now = millis();
+    if ((uint32_t)(now - s_lastI2cPollMs) < I2C_REQUEST_INTERVAL_MS) return;
+    s_lastI2cPollMs = now;
+
+    _wire->requestFrom(_address, I2C_READ_CHUNK_SIZE);
     int idx = 0;
     while (_wire->available() && idx < (int)(sizeof(_rxBuf) - 1)) {
         char c = (char)_wire->read();
@@ -254,9 +262,10 @@ void BotConnect_i2C::process() {
     }
     if (idx > 0) {
         _rxBuf[idx] = '\0';
+        if (strcmp(_rxBuf, "NODATA") == 0) return;
         _parseLine(_rxBuf);
     }
-    if (_ctrlReceived && (millis() - _lastCtrlMs < 500)) {
+    if (_ctrlReceived && (millis() - _lastCtrlMs < CTRL_ACTIVE_TIMEOUT_MS)) {
         controlActive = true;
     } else {
         controlActive = false;
