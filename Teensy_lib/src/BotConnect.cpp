@@ -9,6 +9,7 @@
 #include <stdlib.h>
 
 BotConnect BC;
+BotConnect_i2C BC_I2C;
 
 void BotConnect::begin(HardwareSerial &serial, uint8_t satId) {
     _serial = &serial;
@@ -231,4 +232,110 @@ void BotConnect::_enqueueP2P(const char *line) {
     strncpy(_p2pQueue[insertIdx], line, P2P_MAX_MSG_LEN - 1);
     _p2pQueue[insertIdx][P2P_MAX_MSG_LEN - 1] = '\0';
     _p2pCount++;
+}
+
+void BotConnect_i2C::begin(TwoWire &wire, uint8_t address) {
+    _wire = &wire;
+    _address = address;
+    _ctrlReceived = false;
+    _lastCtrlMs = 0;
+}
+
+void BotConnect_i2C::process() {
+    if (!_wire) return;
+    _wire->requestFrom((int)_address, (int)sizeof(_rxBuf) - 1);
+    int idx = 0;
+    while (_wire->available() && idx < (int)(sizeof(_rxBuf) - 1)) {
+        char c = (char)_wire->read();
+        if (c == '\n' || c == '\r') {
+            break;
+        }
+        _rxBuf[idx++] = c;
+    }
+    if (idx > 0) {
+        _rxBuf[idx] = '\0';
+        _parseLine(_rxBuf);
+    }
+    if (_ctrlReceived && (millis() - _lastCtrlMs < 500)) {
+        controlActive = true;
+    } else {
+        controlActive = false;
+    }
+}
+
+void BotConnect_i2C::sendTelemetryInt(const char *name, int32_t value) {
+    if (!_wire) return;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "DBG:%s=%ld\n", name, (long)value);
+    _sendLine(buf);
+}
+
+void BotConnect_i2C::sendTelemetryFloat(const char *name, float value) {
+    if (!_wire) return;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "DBG:%s=%.4f\n", name, value);
+    _sendLine(buf);
+}
+
+void BotConnect_i2C::sendTelemetryBool(const char *name, bool value) {
+    if (!_wire) return;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "DBG:%s=%d\n", name, value ? 1 : 0);
+    _sendLine(buf);
+}
+
+void BotConnect_i2C::sendTelemetryString(const char *name, const char *value) {
+    if (!_wire) return;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "DBG:%s=%s\n", name, value);
+    _sendLine(buf);
+}
+
+void BotConnect_i2C::LedUpdate() {
+    sendTelemetryBool("Led1", led1);
+    sendTelemetryBool("Led2", led2);
+    sendTelemetryBool("Led3", led3);
+    sendTelemetryBool("Led4", led4);
+}
+
+void BotConnect_i2C::_parseLine(const char *line) {
+    if (!line || line[0] == '\0') return;
+    if (line[0] == 'V') {
+        int sp = 0, ang = 0, sw = 0, btn = 0, st = 0;
+        int parsed = sscanf(line, "V%dA%dSW%dBTN%dSTART%d", &sp, &ang, &sw, &btn, &st);
+        if (parsed == 5) {
+            speed = (int16_t)sp;
+            angle = (int16_t)ang;
+            switches = (uint8_t)sw;
+            buttons = (uint8_t)btn;
+            start = (uint8_t)st;
+            _lastCtrlMs = millis();
+            _ctrlReceived = true;
+        }
+        return;
+    }
+    if (line[0] == 'M' && line[1] >= '1' && line[1] <= '5') {
+        uint8_t modeId = (uint8_t)(line[1] - '0');
+        mode1 = (modeId == 1);
+        mode2 = (modeId == 2);
+        mode3 = (modeId == 3);
+        mode4 = (modeId == 4);
+        mode5 = (modeId == 5);
+        return;
+    }
+    if (strncmp(line, "CAL_", 4) == 0) {
+        calIrMax   = (strcmp(line, CMD_CAL_IR_MAX)   == 0);
+        calIrMin   = (strcmp(line, CMD_CAL_IR_MIN)   == 0);
+        calLineMax = (strcmp(line, CMD_CAL_LINE_MAX) == 0);
+        calLineMin = (strcmp(line, CMD_CAL_LINE_MIN) == 0);
+        calBno     = (strcmp(line, CMD_CAL_BNO)      == 0);
+        return;
+    }
+}
+
+void BotConnect_i2C::_sendLine(const char *line) {
+    if (!_wire || !line) return;
+    _wire->beginTransmission(_address);
+    _wire->write((const uint8_t *)line, strlen(line));
+    _wire->endTransmission();
 }
