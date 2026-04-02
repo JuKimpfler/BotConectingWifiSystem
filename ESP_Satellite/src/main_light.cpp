@@ -139,11 +139,18 @@ static bool flushTelemetryQueue(bool force) {
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
     memcpy(frame.payload + frame.len, &crc, 2);
 
+    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Flushing telem batch: qlen=%d seq=%d force=%d\n",
+                       SAT_ID, g_telemQueueLen, frame.seq, force ? 1 : 0);
+
     bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
     if (ok) {
         g_telemSentCount += g_telemQueueLen;
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem batch sent OK: %d values, total sent=%lu\n",
+                           SAT_ID, g_telemQueueLen, g_telemSentCount);
         g_telemQueueLen = 0;
         g_lastTelemFlush = now;
+    } else {
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem batch send FAILED\n", SAT_ID);
     }
     return ok;
 }
@@ -163,10 +170,16 @@ static bool forwardTelemetryLine(const char *line) {
     char valueStr[32] = {0};
 
     const char *eq = strchr(payload, '=');
-    if (!eq) return false;
+    if (!eq) {
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem parse error: no '=' in line\n", SAT_ID);
+        return false;
+    }
 
     size_t nameLen = (size_t)(eq - payload);
-    if (nameLen == 0 || nameLen >= TELEM_NAME_MAX_LEN) return false;
+    if (nameLen == 0 || nameLen >= TELEM_NAME_MAX_LEN) {
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem parse error: name length %u\n", SAT_ID, (unsigned)nameLen);
+        return false;
+    }
 
     strncpy(name, payload, nameLen);
     name[nameLen] = '\0';
@@ -174,18 +187,25 @@ static bool forwardTelemetryLine(const char *line) {
     strncpy(valueStr, eq + 1, sizeof(valueStr) - 1);
     valueStr[sizeof(valueStr) - 1] = '\0';
 
+    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem recv: %s=%s\n", SAT_ID, name, valueStr);
+
     if (!g_hubKnown) {
         g_telemDropCount++;
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem dropped: hub unknown\n", SAT_ID);
         return false;
     }
 
     int streamIdx = ensureTelemetryStream(name);
     if (streamIdx < 0) {
         g_telemDropCount++;
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem dropped: stream table full\n", SAT_ID);
         return false;
     }
 
-    if (!sendTelemetryDict((uint8_t)streamIdx)) return false;
+    if (!sendTelemetryDict((uint8_t)streamIdx)) {
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem dict send failed for stream %d\n", SAT_ID, streamIdx);
+        return false;
+    }
 
     // If queue is full, flush immediately
     if (g_telemQueueLen >= LIGHT_TELEM_BATCH_SIZE) {
@@ -217,6 +237,8 @@ static bool forwardTelemetryLine(const char *line) {
     }
 
     g_telemQueueLen++;
+    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem queued: stream=%d type=%d qlen=%d\n",
+                       SAT_ID, streamIdx, v.vtype, g_telemQueueLen);
     flushTelemetryQueue(false);  // Try to flush (respects interval)
 
     return true;
@@ -310,6 +332,8 @@ static bool sendFrame(const uint8_t *mac, uint8_t msgType,
 
 // ─── ESP-NOW receive callback ─────────────────────────────────
 static void onFrame(const uint8_t *mac, const Frame_t *frame) {
+    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Frame rx: type=0x%02X seq=%u src_role=%u\n",
+                       SAT_ID, frame->msg_type, frame->seq, frame->src_role);
 
     if (frame->msg_type == MSG_HEARTBEAT) {
         // Hub heartbeat received
@@ -317,6 +341,10 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             bool wasOnline = g_hubOnline;
             g_lastHubHeartbeat = millis();
             g_hubOnline = true;
+
+            if (!wasOnline) {
+                LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub came ONLINE\n", SAT_ID);
+            }
 
             // Always update hub MAC when it changes
             bool macChanged = memcmp(g_hubMac, mac, 6) != 0;
@@ -439,14 +467,17 @@ void loop() {
         hb.uptime_ms = now;
         hb.rssi      = 0;
         hb.queue_len = g_telemQueueLen;
-        sendFrame(g_hubMac, MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
+        bool hbOk = sendFrame(g_hubMac, MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Heartbeat sent: %s (qlen=%d)\n",
+                           SAT_ID, hbOk ? "OK" : "FAIL", g_telemQueueLen);
     }
 
     // ── Hub online/offline detection ──────────────────────────
     if (g_hubOnline && g_hubKnown &&
         (now - g_lastHubHeartbeat) > HEARTBEAT_TIMEOUT_MS) {
         g_hubOnline = false;
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub offline\n", SAT_ID);
+        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub went OFFLINE (timeout=%lums)\n",
+                           SAT_ID, (unsigned long)(now - g_lastHubHeartbeat));
     }
 
     // ── Telemetry flush tick (ultra-aggressive) ───────────────

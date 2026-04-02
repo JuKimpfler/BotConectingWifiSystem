@@ -92,17 +92,29 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
         if (frame->len < sizeof(TelemetryDictPayload_t)) break;
         const TelemetryDictPayload_t *dict =
             reinterpret_cast<const TelemetryDictPayload_t *>(frame->payload);
+        Serial.printf("[ROUTER] TELEM_DICT: role=%u stream_id=%u name=%s\n",
+                      frame->src_role, dict->stream_id, dict->name);
         _upsertDictName(frame->src_role, dict->stream_id, dict->name);
         break;
     }
     case MSG_TELEM_BATCH: {
-        if (frame->len == 0 || (frame->len % sizeof(TelemetryCompactValue_t)) != 0) break;
+        if (frame->len == 0 || (frame->len % sizeof(TelemetryCompactValue_t)) != 0) {
+            Serial.printf("[ROUTER] TELEM_BATCH invalid len=%u\n", frame->len);
+            break;
+        }
         const uint8_t count = frame->len / sizeof(TelemetryCompactValue_t);
         const TelemetryCompactValue_t *vals =
             reinterpret_cast<const TelemetryCompactValue_t *>(frame->payload);
+        Serial.printf("[ROUTER] TELEM_BATCH: role=%u count=%u\n", frame->src_role, count);
         for (uint8_t i = 0; i < count; i++) {
             const char *name = _dictNameFor(frame->src_role, vals[i].stream_id);
-            if (!name) continue;
+            if (!name) {
+                Serial.printf("[ROUTER] TELEM_BATCH: unknown stream_id=%u for role=%u\n",
+                              vals[i].stream_id, frame->src_role);
+                continue;
+            }
+            Serial.printf("[ROUTER] TELEM_BATCH[%u]: stream_id=%u name=%s type=%u raw=%ld\n",
+                          i, vals[i].stream_id, name, vals[i].vtype, (long)vals[i].raw);
             TelemetryEntry_t entry = {};
             compactValueToTelemetryEntry(&vals[i], name, &entry);
             _telem->ingest(&entry, frame->src_role);
@@ -154,10 +166,11 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
             // Add / update peer in registry
             PeerInfo info = {};
             strlcpy(info.name, disc->name, sizeof(info.name));
-            info.role     = disc->role;
+            info.role       = disc->role;
             memcpy(info.mac, mac, 6);
-            info.online   = true;
-            info.lastSeen = millis();
+            info.online     = true;
+            info.lastSeen   = millis();
+            info.lastDataOkMs = millis();  // Initialize to now to avoid initial false negative
             _peers->addOrUpdate(info);
 
             // Register peer in ESP-NOW so we can send to it
@@ -196,6 +209,9 @@ void CommandRouter::broadcastPeerStatus() {
     doc["type"] = "peer_status";
     JsonArray arr = doc["peers"].to<JsonArray>();
     uint32_t now = millis();
+
+    Serial.printf("[ROUTER] Broadcasting peer status (count=%d)\n", _peers->count());
+
     for (int i = 0; i < _peers->count(); i++) {
         PeerInfo *p = _peers->get(i);
         if (!p) continue;
@@ -203,13 +219,18 @@ void CommandRouter::broadcastPeerStatus() {
         o["name"]         = p->name;
         o["role"]         = (p->role == ROLE_SAT1) ? "SAT1" : "SAT2";
         o["online"]       = p->online;
-        o["data_path_ok"] = p->online && (now - p->lastDataOkMs) < DATA_PATH_TIMEOUT_MS;
+        bool dataPathOk   = p->online && (now - p->lastDataOkMs) < DATA_PATH_TIMEOUT_MS;
+        o["data_path_ok"] = dataPathOk;
         char macStr[18];
         snprintf(macStr, sizeof(macStr),
                  "%02X:%02X:%02X:%02X:%02X:%02X",
                  p->mac[0], p->mac[1], p->mac[2],
                  p->mac[3], p->mac[4], p->mac[5]);
         o["mac"] = macStr;
+
+        Serial.printf("[ROUTER] Peer[%d]: name=%s role=%u online=%d data_path_ok=%d lastDataOk=%lu\n",
+                      i, p->name, p->role, p->online, dataPathOk,
+                      (unsigned long)(now - p->lastDataOkMs));
     }
     char buf[512];
     size_t n = serializeJson(doc, buf, sizeof(buf));
@@ -220,6 +241,9 @@ void CommandRouter::broadcastPeerStatus() {
 void CommandRouter::_broadcastTelemetry() {
     if (!_ws || !_telem) return;
     int cnt = _telem->streamCount();
+
+    Serial.printf("[ROUTER] Broadcasting telemetry (stream count=%d)\n", cnt);
+
     if (cnt == 0) return;
 
     JsonDocument doc;
@@ -234,6 +258,9 @@ void CommandRouter::_broadcastTelemetry() {
         o["current"] = s->current;
         o["min"]     = s->minVal;
         o["max"]     = s->maxVal;
+
+        Serial.printf("[ROUTER] Stream[%d]: role=%u name=%s current=%.2f\n",
+                      i, s->role, s->name, s->current);
     }
     char buf[1024];
     size_t n = serializeJson(doc, buf, sizeof(buf));
@@ -411,10 +438,11 @@ void CommandRouter::_handleAddPeer(const char *json) {
 
     PeerInfo info = {};
     strlcpy(info.name, name, sizeof(info.name));
-    info.role     = role;
+    info.role       = role;
     memcpy(info.mac, mac, 6);
-    info.online   = false;
-    info.lastSeen = 0;
+    info.online     = false;
+    info.lastSeen   = 0;
+    info.lastDataOkMs = 0;  // Will be set when first data arrives
     _peers->addOrUpdate(info);
     _espnow->addPeer(mac, nullptr);
 
