@@ -13,7 +13,11 @@ void TelemetryBuffer::begin(uint32_t minIntervalMs) {
 
 void TelemetryBuffer::ingest(const TelemetryEntry_t *entry, uint8_t role) {
     StreamStat *s = _getOrCreate(entry->name, role);
-    if (!s) return;
+    if (!s) {
+        Serial.printf("[TELEM] Failed to create stream: name=%s role=%u (table full)\n",
+                      entry->name, role);
+        return;
+    }
 
     float val = 0.0f;
     if (entry->vtype == 0) val = (float)entry->value.i32;
@@ -26,6 +30,8 @@ void TelemetryBuffer::ingest(const TelemetryEntry_t *entry, uint8_t role) {
         s->minVal = val;
         s->maxVal = val;
         s->valid  = true;
+        Serial.printf("[TELEM] New stream created: name=%s role=%u val=%.2f count=%d\n",
+                      entry->name, role, val, _count);
     } else {
         if (val < s->minVal) s->minVal = val;
         if (val > s->maxVal) s->maxVal = val;
