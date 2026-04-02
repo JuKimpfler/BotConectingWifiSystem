@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "channel": 6,
+  "pmk": "",
+  "peers": [],
+  "ui": {
+    "theme": "dark",
+    "rate_limit_ms": 20,
+    "mode_labels": ["Mode 1", "Mode 2", "Mode 3", "Mode 4", "Mode 5"],
+    "cal_labels": ["Calib 1", "Calib 2", "Calib 3", "Calib 4", "Calib 5"]
+  },
+  "telemetry": {
+    "max_rate_hz": 20
+  },
+  "heartbeat": {
+    "interval_ms": 1000,
+    "timeout_ms": 4000
+  }
+}
