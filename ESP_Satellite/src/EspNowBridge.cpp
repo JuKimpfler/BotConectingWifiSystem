@@ -20,7 +20,7 @@ bool EspNowBridge::begin(uint8_t channel) {
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 
     if (esp_now_init() != ESP_OK) {
-        Serial.println("[BRIDGE] ESP-NOW init failed");
+       // Serial.println("[BRIDGE] ESP-NOW init failed");
         return false;
     }
 
@@ -31,7 +31,7 @@ bool EspNowBridge::begin(uint8_t channel) {
     uint8_t bcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     addPeer(bcast);
 
-    Serial.printf("[BRIDGE] SAT%d ready ch=%u\n", SAT_ID, channel);
+   // Serial.printf("[BRIDGE] SAT%d ready ch=%u\n", SAT_ID, channel);
     return true;
 }
 
@@ -97,8 +97,8 @@ bool EspNowBridge::send(const uint8_t *mac, const Frame_t *frame) {
         } else {
             addPeer(mac);
         }
-        Serial.printf("[BRIDGE] peer auto-restored: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+       // Serial.printf("[BRIDGE] peer auto-restored: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                   //   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
 
     uint16_t totalLen = FRAME_HEADER_SIZE + frame->len + sizeof(uint16_t);
@@ -107,11 +107,11 @@ bool EspNowBridge::send(const uint8_t *mac, const Frame_t *frame) {
     if (err != ESP_OK) {
         uint8_t ch = 0;
         esp_wifi_get_channel(&ch, nullptr);
-        Serial.printf("[BRIDGE] esp_now_send err=%s mac=%02X:%02X:%02X:%02X:%02X:%02X "
-                      "ch=%u type=0x%02X seq=%u\n",
-                      esp_err_to_name(err),
-                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                      ch, frame->msg_type, frame->seq);
+       // Serial.printf("[BRIDGE] esp_now_send err=%s mac=%02X:%02X:%02X:%02X:%02X:%02X "
+                      //"ch=%u type=0x%02X seq=%u\n",
+                    //  esp_err_to_name(err),
+                     // mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                    //  ch, frame->msg_type, frame->seq);
     }
     return (err == ESP_OK);
 }
@@ -126,8 +126,8 @@ void EspNowBridge::tick() {
 }
 
 void EspNowBridge::_doRecovery(const uint8_t *mac) {
-    Serial.printf("[BRIDGE] peer recovery: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+   // Serial.printf("[BRIDGE] peer recovery: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                 // mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     StoredPeer *sp = _findStoredPeer(mac);
     if (sp && sp->valid) {
         addPeer(mac, sp->encrypt, sp->encrypt ? (const char *)sp->lmk : nullptr);
@@ -157,12 +157,12 @@ void EspNowBridge::_onSent(const uint8_t *mac, esp_now_send_status_t s) {
     uint8_t  streak = ps ? ++(ps->failStreak) : 0;
     uint32_t msOk   = ps ? (millis() - ps->lastOkMs) : 0;
 
-    Serial.printf("[BRIDGE] send failed to %02X:%02X:%02X:%02X:%02X:%02X "
-                  "streak=%u ch=%u peer=%d ms_since_ok=%lu heap=%lu\n",
-                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                  streak, ch, (int)peerExists,
-                  (unsigned long)msOk,
-                  (unsigned long)ESP.getFreeHeap());
+   // Serial.printf("[BRIDGE] send failed to %02X:%02X:%02X:%02X:%02X:%02X "
+            //      "streak=%u ch=%u peer=%d ms_since_ok=%lu heap=%lu\n",
+            //      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+            //      streak, ch, (int)peerExists,
+            //      (unsigned long)msOk,
+            //      (unsigned long)ESP.getFreeHeap());
 
     if (ps && streak >= BRIDGE_FAIL_STREAK_THRESHOLD) {
         ps->needsRecovery = true;
@@ -180,7 +180,7 @@ void EspNowBridge::_onRecv(const uint8_t *mac,
 
     // Validate that the received length matches the claimed payload length
     if (len < (int)(FRAME_HEADER_SIZE + f->len + 2)) {
-        Serial.println("[BRIDGE] Length mismatch - frame truncated");
+       // Serial.println("[BRIDGE] Length mismatch - frame truncated");
         return;
     }
 
@@ -188,13 +188,13 @@ void EspNowBridge::_onRecv(const uint8_t *mac,
     uint16_t rxCrc;
     memcpy(&rxCrc, data + FRAME_HEADER_SIZE + f->len, 2);
     if (calcCrc != rxCrc) {
-        Serial.println("[BRIDGE] CRC error");
+       // Serial.println("[BRIDGE] CRC error");
         return;
     }
 
-    Serial.printf("[BRIDGE] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u nid=0x%02X\n",
-                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                  f->msg_type, f->seq, f->src_role, f->network_id);
+   // Serial.printf("[BRIDGE] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u nid=0x%02X\n",
+                //  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                //  f->msg_type, f->seq, f->src_role, f->network_id);
 
     // Anti-mis-pairing: reject frames from other BotConnectingWifiSystem deployments.
     // 0x00 means legacy / accept-any and is always allowed.
@@ -202,10 +202,10 @@ void EspNowBridge::_onRecv(const uint8_t *mac,
     if (incoming_nid != 0x00 &&
         ESPNOW_NETWORK_ID != 0x00 &&
         incoming_nid != (uint8_t)ESPNOW_NETWORK_ID) {
-        Serial.printf("[BRIDGE] DROPPED – foreign network_id 0x%02X (ours 0x%02X) "
-                      "from %02X:%02X:%02X:%02X:%02X:%02X\n",
-                      incoming_nid, (uint8_t)ESPNOW_NETWORK_ID,
-                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+       // Serial.printf("[BRIDGE] DROPPED – foreign network_id 0x%02X (ours 0x%02X) "
+                    //  "from %02X:%02X:%02X:%02X:%02X:%02X\n",
+                    //  incoming_nid, (uint8_t)ESPNOW_NETWORK_ID,
+                    //  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         return;
     }
 
