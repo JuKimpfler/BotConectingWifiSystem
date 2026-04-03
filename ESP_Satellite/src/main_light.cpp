@@ -380,8 +380,7 @@ void loop() {
         hb.uptime_ms = now;
         hb.rssi      = 0;
         hb.queue_len = g_telemQueueLen;
-        bool hbOk = sendFrame(g_hubMac, MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
-        (void)hbOk;
+        sendFrame(g_hubMac, MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
     }
 
     // ── Hub online/offline detection ──────────────────────────

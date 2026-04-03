@@ -100,11 +100,6 @@ bool EspNowBridge::send(const uint8_t *mac, const Frame_t *frame) {
     uint16_t totalLen = FRAME_HEADER_SIZE + frame->len + sizeof(uint16_t);
     esp_err_t err = esp_now_send(mac, (const uint8_t *)frame, totalLen);
 
-    if (err != ESP_OK) {
-        uint8_t ch = 0;
-        esp_wifi_get_channel(&ch, nullptr);
-        (void)ch;
-    }
     return (err == ESP_OK);
 }
 
