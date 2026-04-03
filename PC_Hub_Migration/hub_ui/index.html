@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCWS PC Hub — Live Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+    --orange: #e3b341;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+  header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
+  #conn-badge { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-connected    { background: #1f3d2a; color: var(--green); }
+  .badge-disconnected { background: #3d1f1f; color: var(--red); }
+  .main { display: grid; grid-template-columns: 260px 1fr; gap: 0; height: calc(100vh - 45px); overflow: hidden; }
+  .sidebar { background: var(--panel); border-right: 1px solid var(--border); padding: 12px; overflow-y: auto; }
+  .sidebar h2 { font-size: 12px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; letter-spacing: .08em; }
+  .peer-card { border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+  .peer-card.online  { border-color: var(--green); }
+  .peer-card.offline { border-color: var(--border); }
+  .peer-name { font-weight: 600; font-size: 14px; }
+  .peer-badge { display: inline-block; padding: 1px 8px; border-radius: 8px; font-size: 11px; margin-left: 6px; }
+  .peer-badge.online  { background: #1f3d2a; color: var(--green); }
+  .peer-badge.offline { background: #2d2d2d; color: var(--muted); }
+  .peer-meta { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .peer-meta span { display: block; }
+  .streams-section { margin-top: 12px; }
+  .stream-item { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .stream-item:last-child { border-bottom: none; }
+  .stream-item input[type=checkbox] { cursor: pointer; }
+  .stream-name { flex: 1; font-size: 13px; }
+  .stream-value { font-family: monospace; font-size: 12px; color: var(--accent); min-width: 70px; text-align: right; }
+  .content { display: flex; flex-direction: column; overflow: hidden; }
+  .tabs { background: var(--panel); border-bottom: 1px solid var(--border); display: flex; gap: 0; }
+  .tab { padding: 8px 18px; cursor: pointer; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { flex: 1; overflow: hidden; display: none; padding: 16px; }
+  .tab-content.active { display: flex; flex-direction: column; }
+  #chart-container { flex: 1; min-height: 0; }
+  .controls { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  .btn { padding: 5px 14px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); color: var(--text); cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+  select, input[type=number] { padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); color: var(--text); font-size: 13px; }
+  label { color: var(--muted); font-size: 13px; }
+  .cmd-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .cmd-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
+  .cmd-card h3 { font-size: 13px; color: var(--accent); margin-bottom: 10px; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .form-row label { min-width: 60px; color: var(--muted); font-size: 12px; }
+  .form-row input, .form-row select { flex: 1; }
+  .log-panel { flex: 1; overflow-y: auto; font-family: monospace; font-size: 12px; line-height: 1.5; }
+  .log-line { padding: 2px 0; border-bottom: 1px solid #1a1f26; }
+  .log-line.rx { color: #9ecbff; }
+  .log-line.tx { color: var(--green); }
+  .log-line.err { color: var(--red); }
+  .log-line.info { color: var(--muted); }
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+  .metric-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .metric-card .value { font-size: 22px; font-weight: 600; color: var(--accent); margin-top: 4px; font-family: monospace; }
+  .metric-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  #status-bar { background: var(--panel); border-top: 1px solid var(--border); padding: 3px 12px; font-size: 11px; color: var(--muted); display: flex; gap: 20px; }
+  .ack-log { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .ack-ok  { color: var(--green); }
+  .ack-err { color: var(--red); }
+  .hidden { display: none; }
+  #history-panel { display: flex; flex-direction: column; gap: 8px; }
+  #hist-chart { flex: 1; min-height: 300px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 BCWS PC Hub</h1>
+  <span id="conn-badge" class="badge-disconnected">● Disconnected</span>
+  <span style="color:var(--muted);font-size:12px" id="uptime-label"></span>
+  <div style="flex:1"></div>
+  <button class="btn" onclick="location.reload()">↻ Reload</button>
+</header>
+
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h2>Satellites</h2>
+    <div id="peers-container">
+      <div class="peer-card" id="peer-SAT1">
+        <span class="peer-name">SAT1</span><span class="peer-badge offline" id="badge-SAT1">OFFLINE</span>
+        <div class="peer-meta" id="meta-SAT1">
+          <span>RSSI: —</span><span>Uptime: —</span><span>Queue: —</span>
+        </div>
+      </div>
+      <div class="peer-card" id="peer-SAT2">
+        <span class="peer-name">SAT2</span><span class="peer-badge offline" id="badge-SAT2">OFFLINE</span>
+        <div class="peer-meta" id="meta-SAT2">
+          <span>RSSI: —</span><span>Uptime: —</span><span>Queue: —</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="streams-section" style="margin-top:14px">
+      <h2>Live Streams</h2>
+      <div id="streams-list"></div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('plotter')">📈 Plotter</div>
+      <div class="tab" onclick="showTab('commands')">🎮 Commands</div>
+      <div class="tab" onclick="showTab('history')">📅 History</div>
+      <div class="tab" onclick="showTab('diagnostics')">🔍 Diagnostics</div>
+      <div class="tab" onclick="showTab('trace')">📋 Frame Trace</div>
+    </div>
+
+    <!-- Plotter tab -->
+    <div class="tab-content active" id="tab-plotter">
+      <div class="controls">
+        <button class="btn active" id="btn-live" onclick="toggleLive()">⏸ Pause</button>
+        <button class="btn" onclick="clearChart()">🗑 Clear</button>
+        <button class="btn" onclick="exportCSV()">⬇ CSV</button>
+        <label>Window:</label>
+        <select id="window-select" onchange="setWindow(this.value)">
+          <option value="30">30s</option>
+          <option value="60" selected>60s</option>
+          <option value="120">2min</option>
+          <option value="300">5min</option>
+        </select>
+        <label>Rate:</label>
+        <select id="rate-select" onchange="setRate(this.value)">
+          <option value="50" selected>50 Hz</option>
+          <option value="20">20 Hz</option>
+          <option value="10">10 Hz</option>
+          <option value="5">5 Hz</option>
+        </select>
+      </div>
+      <div id="chart-container"></div>
+    </div>
+
+    <!-- Commands tab -->
+    <div class="tab-content" id="tab-commands">
+      <div class="cmd-panel">
+        <div class="cmd-card">
+          <h3>🕹 Control (ctrl)</h3>
+          <div class="form-row"><label>Target</label><select id="ctrl-sat"><option>SAT1</option><option>SAT2</option></select></div>
+          <div class="form-row"><label>Speed</label><input type="number" id="ctrl-speed" value="0" min="-32768" max="32767"></div>
+          <div class="form-row"><label>Angle</label><input type="number" id="ctrl-angle" value="0" min="-32768" max="32767"></div>
+          <div class="form-row"><label>Start</label><select id="ctrl-start"><option value="0">OFF</option><option value="1">ON</option></select></div>
+          <div class="form-row"><label>SW</label><input type="number" id="ctrl-sw" value="0" min="0" max="7"></div>
+          <div class="form-row"><label>BTN</label><input type="number" id="ctrl-btn" value="0" min="0" max="15"></div>
+          <button class="btn" onclick="sendCtrl()" style="width:100%;margin-top:8px">Send CTRL</button>
+          <div class="ack-log" id="ack-ctrl">—</div>
+        </div>
+        <div class="cmd-card">
+          <h3>⚙ Mode (mode)</h3>
+          <div class="form-row"><label>Target</label><select id="mode-sat"><option>SAT1</option><option>SAT2</option></select></div>
+          <div class="form-row"><label>Mode</label>
+            <select id="mode-id">
+              <option value="1">M1</option><option value="2">M2</option>
+              <option value="3">M3</option><option value="4">M4</option><option value="5">M5</option>
+            </select>
+          </div>
+          <button class="btn" onclick="sendMode()" style="width:100%;margin-top:8px">Send MODE</button>
+          <div class="ack-log" id="ack-mode">—</div>
+        </div>
+        <div class="cmd-card">
+          <h3>🔧 Calibrate (cal)</h3>
+          <div class="form-row"><label>Target</label><select id="cal-sat"><option>SAT1</option><option>SAT2</option></select></div>
+          <div class="form-row"><label>Command</label>
+            <select id="cal-cmd">
+              <option value="1">IR_MAX</option><option value="2">IR_MIN</option>
+              <option value="3">LINE_MAX</option><option value="4">LINE_MIN</option>
+              <option value="5">BNO</option>
+            </select>
+          </div>
+          <button class="btn" onclick="sendCal()" style="width:100%;margin-top:8px">Send CAL</button>
+          <div class="ack-log" id="ack-cal">—</div>
+        </div>
+        <div class="cmd-card">
+          <h3>📡 Subscribe Streams</h3>
+          <div class="form-row"><label>Streams</label><input type="text" id="sub-streams" placeholder="SAT1/Speed,SAT2/Angle"></div>
+          <div class="form-row"><label>Rate Hz</label><input type="number" id="sub-rate" value="20" min="1" max="50"></div>
+          <button class="btn" onclick="sendSubscribe()" style="width:100%;margin-top:8px">Subscribe</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- History tab -->
+    <div class="tab-content" id="tab-history">
+      <div id="history-panel">
+        <div class="controls">
+          <label>SAT:</label>
+          <select id="hist-sat"><option value="">All</option><option>SAT1</option><option>SAT2</option></select>
+          <label>Stream:</label>
+          <input type="text" id="hist-stream" placeholder="Speed" style="width:120px">
+          <label>Since (s ago):</label>
+          <input type="number" id="hist-since" value="60" min="1" style="width:80px">
+          <label>Limit:</label>
+          <input type="number" id="hist-limit" value="500" min="1" max="5000" style="width:80px">
+          <button class="btn" onclick="loadHistory()">Load</button>
+        </div>
+        <div id="hist-chart"></div>
+        <div id="hist-table" style="overflow-y:auto;max-height:300px;font-family:monospace;font-size:12px;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- Diagnostics tab -->
+    <div class="tab-content" id="tab-diagnostics">
+      <div class="metrics-grid" id="metrics-grid">
+        <div class="metric-card"><div class="label">Uptime</div><div class="value" id="m-uptime">—</div></div>
+        <div class="metric-card"><div class="label">RX Frames</div><div class="value" id="m-rx">—</div></div>
+        <div class="metric-card"><div class="label">TX Frames</div><div class="value" id="m-tx">—</div></div>
+        <div class="metric-card"><div class="label">Parse Errors</div><div class="value" id="m-parse-err">—</div></div>
+      </div>
+      <div id="sat-diag" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"></div>
+      <button class="btn" onclick="loadMetrics()" style="margin-top:12px">↻ Refresh Metrics</button>
+    </div>
+
+    <!-- Frame trace tab -->
+    <div class="tab-content" id="tab-trace">
+      <div class="controls">
+        <button class="btn" id="btn-trace-live" onclick="toggleTraceLive()">⏸ Pause</button>
+        <button class="btn" onclick="clearTrace()">🗑 Clear</button>
+        <label>Filter:</label>
+        <select id="trace-filter">
+          <option value="">All</option>
+          <option value="telemetry">Telemetry</option>
+          <option value="command_ack">Commands</option>
+          <option value="peer_status">Peer Status</option>
+          <option value="hub_status">Hub Status</option>
+        </select>
+      </div>
+      <div class="log-panel" id="trace-log"></div>
+    </div>
+  </div>
+</div>
+
+<div id="status-bar">
+  <span id="sb-rx">RX: 0</span>
+  <span id="sb-tx">TX: 0</span>
+  <span id="sb-latency">Latency: —</span>
+  <span id="sb-streams">Streams: 0</span>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+let ws = null;
+let connected = false;
+let live = true;
+let traceLive = true;
+let chart = null;
+let histChart = null;
+let windowS = 60;
+let rxCount = 0, txCount = 0;
+let streamValues = {};     // { "SAT1/Speed": { value, ts } }
+let chartSeries = {};      // { "SAT1/Speed": [{x, y}] }
+let activeStreams = new Set(); // checked streams
+let lastRxTs = 0;
+let reconnectTimer = null;
+
+// ── WebSocket ─────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/ws`;
+  ws = new WebSocket(url);
+  ws.onopen = () => {
+    connected = true;
+    document.getElementById('conn-badge').textContent = '● Connected';
+    document.getElementById('conn-badge').className = 'badge-connected';
+    addTrace('info', `Connected to ${url}`);
+  };
+  ws.onclose = () => {
+    connected = false;
+    document.getElementById('conn-badge').textContent = '● Disconnected';
+    document.getElementById('conn-badge').className = 'badge-disconnected';
+    addTrace('err', 'WebSocket disconnected — reconnecting in 3s');
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connectWS, 3000);
+  };
+  ws.onerror = (e) => addTrace('err', 'WebSocket error');
+  ws.onmessage = (ev) => {
+    try { handleMessage(JSON.parse(ev.data)); } catch(e) {}
+  };
+}
+
+function wsSend(obj) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(obj));
+    txCount++;
+    document.getElementById('sb-tx').textContent = `TX: ${txCount}`;
+    return true;
+  }
+  addTrace('err', 'WS not connected');
+  return false;
+}
+
+// ── Message handlers ──────────────────────────────────────
+function handleMessage(msg) {
+  rxCount++;
+  document.getElementById('sb-rx').textContent = `RX: ${rxCount}`;
+  const now = Date.now();
+  if (lastRxTs) {
+    const latMs = now - lastRxTs;
+    document.getElementById('sb-latency').textContent = `Latency: ${latMs}ms`;
+  }
+  lastRxTs = now;
+
+  addTrace(msg.type === 'telemetry' ? 'rx' : 'info', JSON.stringify(msg).substring(0, 200));
+
+  if (msg.type === 'telemetry') handleTelemetry(msg);
+  else if (msg.type === 'peer_status') handlePeerStatus(msg);
+  else if (msg.type === 'command_ack') handleCommandAck(msg);
+  else if (msg.type === 'hub_status') handleHubStatus(msg);
+}
+
+function handleTelemetry(msg) {
+  const key = `${msg.sat_id}/${msg.name}`;
+  const val = msg.value;
+  streamValues[key] = { value: val, ts: msg.rx_ts || Date.now()/1000 };
+  updateStreamList(key, val);
+
+  if (live && activeStreams.has(key)) {
+    if (!chartSeries[key]) chartSeries[key] = [];
+    const ts = (msg.rx_ts || Date.now()/1000) * 1000;
+    chartSeries[key].push([ts, typeof val === 'number' ? val : 0]);
+    // Trim to window
+    const cutoff = ts - windowS * 1000;
+    chartSeries[key] = chartSeries[key].filter(p => p[0] >= cutoff);
+    refreshChart();
+  }
+  document.getElementById('sb-streams').textContent =
+    `Streams: ${Object.keys(streamValues).length}`;
+}
+
+function handlePeerStatus(msg) {
+  if (!msg.peers) return;
+  msg.peers.forEach(p => {
+    const id = p.sat_id;
+    const card = document.getElementById(`peer-${id}`);
+    const badge = document.getElementById(`badge-${id}`);
+    const meta  = document.getElementById(`meta-${id}`);
+    if (!card) return;
+    const online = p.online || p.state === 'online';
+    card.className = `peer-card ${online ? 'online' : 'offline'}`;
+    badge.className = `peer-badge ${online ? 'online' : 'offline'}`;
+    badge.textContent = online ? 'ONLINE' : 'OFFLINE';
+    meta.innerHTML = `
+      <span>MAC: ${p.mac || '—'}</span>
+      <span>RSSI: ${p.rssi ?? '—'} dBm</span>
+      <span>Uptime: ${p.uptime_ms != null ? (p.uptime_ms/1000).toFixed(1)+'s' : '—'}</span>
+      <span>Queue: ${p.queue_len ?? '—'}</span>`;
+  });
+}
+
+function handleCommandAck(msg) {
+  const el = document.getElementById(`ack-${msg.cmd_type}`);
+  const cls = msg.status === 'ok' ? 'ack-ok' : 'ack-err';
+  const text = `${msg.sat_id} seq=${msg.seq} → <span class="${cls}">${msg.status}</span> (retries:${msg.retries})`;
+  if (el) el.innerHTML = text;
+}
+
+function handleHubStatus(msg) {
+  if (msg.uptime_s != null) {
+    document.getElementById('m-uptime').textContent = `${msg.uptime_s}s`;
+    document.getElementById('uptime-label').textContent = `uptime: ${msg.uptime_s}s`;
+  }
+  if (msg.rx_frames != null) document.getElementById('m-rx').textContent = msg.rx_frames;
+  if (msg.tx_frames != null) document.getElementById('m-tx').textContent = msg.tx_frames;
+  renderSatDiag(msg.errors || {});
+}
+
+function renderSatDiag(errors) {
+  const container = document.getElementById('sat-diag');
+  container.innerHTML = '';
+  for (const [satId, counts] of Object.entries(errors)) {
+    const card = document.createElement('div');
+    card.className = 'cmd-card';
+    card.innerHTML = `<h3>${satId}</h3>` +
+      Object.entries(counts).map(([k,v]) =>
+        `<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--muted)">${k}</span>
+          <span style="color:${v>0?'var(--red)':'var(--green)'};font-family:monospace">${v}</span>
+        </div>`
+      ).join('');
+    container.appendChild(card);
+  }
+}
+
+// ── Stream list ───────────────────────────────────────────
+function updateStreamList(key, val) {
+  let el = document.getElementById(`stream-${CSS.escape(key)}`);
+  if (!el) {
+    const container = document.getElementById('streams-list');
+    el = document.createElement('div');
+    el.className = 'stream-item';
+    el.id = `stream-${CSS.escape(key)}`;
+    el.innerHTML = `
+      <input type="checkbox" id="chk-${CSS.escape(key)}" onchange="toggleStream('${key}')">
+      <span class="stream-name">${key}</span>
+      <span class="stream-value" id="val-${CSS.escape(key)}">—</span>`;
+    container.appendChild(el);
+  }
+  const v = typeof val === 'number' ? val.toFixed(3) : String(val);
+  const valEl = document.getElementById(`val-${CSS.escape(key)}`);
+  if (valEl) valEl.textContent = v;
+}
+
+function toggleStream(key) {
+  const chk = document.getElementById(`chk-${CSS.escape(key)}`);
+  if (chk.checked) {
+    activeStreams.add(key);
+    if (!chartSeries[key]) chartSeries[key] = [];
+    refreshChart();
+  } else {
+    activeStreams.delete(key);
+    delete chartSeries[key];
+    refreshChart();
+  }
+}
+
+// ── ECharts plotter ───────────────────────────────────────
+function initChart() {
+  const dom = document.getElementById('chart-container');
+  chart = echarts.init(dom, 'dark');
+  window.addEventListener('resize', () => chart.resize());
+  chart.setOption({
+    backgroundColor: 'transparent',
+    grid: { top: 40, right: 20, bottom: 60, left: 60 },
+    tooltip: { trigger: 'axis', formatter: params =>
+      params.map(p => `${p.seriesName}: ${Number(p.value[1]).toFixed(4)}`).join('<br>') },
+    legend: { top: 8, textStyle: { color: '#8b949e' } },
+    xAxis: { type: 'time', axisLabel: { color: '#8b949e' } },
+    yAxis: { axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#30363d' } } },
+    series: [],
+  });
+}
+
+function refreshChart() {
+  if (!chart) return;
+  const series = Array.from(activeStreams).map((key, i) => ({
+    name: key,
+    type: 'line',
+    data: (chartSeries[key] || []),
+    showSymbol: false,
+    lineStyle: { width: 1.5 },
+  }));
+  chart.setOption({ series }, { replaceMerge: ['series'] });
+}
+
+function clearChart() {
+  for (const k of Object.keys(chartSeries)) chartSeries[k] = [];
+  refreshChart();
+}
+
+function toggleLive() {
+  live = !live;
+  const btn = document.getElementById('btn-live');
+  btn.textContent = live ? '⏸ Pause' : '▶ Resume';
+  btn.className = live ? 'btn active' : 'btn';
+}
+
+function setWindow(v) { windowS = parseInt(v); }
+function setRate(v) {
+  wsSend({ type: 'subscribe', streams: Array.from(activeStreams), rate_limit_hz: parseInt(v) });
+}
+
+function exportCSV() {
+  let csv = 'stream,timestamp_ms,value\n';
+  for (const [key, pts] of Object.entries(chartSeries)) {
+    pts.forEach(p => { csv += `${key},${p[0]},${p[1]}\n`; });
+  }
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `bcws_telemetry_${Date.now()}.csv`;
+  a.click();
+}
+
+// ── Commands ──────────────────────────────────────────────
+function sendCtrl() {
+  wsSend({
+    type: 'ctrl', sat_id: document.getElementById('ctrl-sat').value,
+    speed: +document.getElementById('ctrl-speed').value,
+    angle: +document.getElementById('ctrl-angle').value,
+    switches: +document.getElementById('ctrl-sw').value,
+    buttons: +document.getElementById('ctrl-btn').value,
+    start: +document.getElementById('ctrl-start').value,
+  });
+}
+function sendMode() {
+  wsSend({ type: 'mode', sat_id: document.getElementById('mode-sat').value,
+           mode_id: +document.getElementById('mode-id').value });
+}
+function sendCal() {
+  wsSend({ type: 'cal', sat_id: document.getElementById('cal-sat').value,
+           cal_cmd: +document.getElementById('cal-cmd').value });
+}
+function sendSubscribe() {
+  const streams = document.getElementById('sub-streams').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const rate = +document.getElementById('sub-rate').value;
+  wsSend({ type: 'subscribe', streams, rate_limit_hz: rate });
+}
+
+// ── History ───────────────────────────────────────────────
+async function loadHistory() {
+  const sat = document.getElementById('hist-sat').value;
+  const stream = document.getElementById('hist-stream').value;
+  const sinceS = +document.getElementById('hist-since').value;
+  const limit = +document.getElementById('hist-limit').value;
+  const since = (Date.now()/1000) - sinceS;
+  let url = `/api/telemetry/history?since=${since}&limit=${limit}`;
+  if (sat) url += `&sat=${sat}`;
+  if (stream) url += `&stream=${stream}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    renderHistoryTable(data.samples || []);
+    renderHistoryChart(data.samples || []);
+  } catch(e) {
+    document.getElementById('hist-table').textContent = `Error: ${e}`;
+  }
+}
+
+function renderHistoryTable(rows) {
+  const el = document.getElementById('hist-table');
+  if (!rows.length) { el.textContent = 'No data'; return; }
+  const header = '<tr><th>Time</th><th>SAT</th><th>Stream</th><th>Value</th></tr>';
+  const body = rows.slice(0,200).map(r => {
+    const t = new Date(r.ts_real*1000).toISOString().replace('T',' ').substring(0,23);
+    const v = r.value != null ? r.value : '—';
+    return `<tr><td>${t}</td><td>${r.sat_role===1?'SAT1':'SAT2'}</td><td>${r.stream_name}</td><td>${v}</td></tr>`;
+  }).join('');
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead style="color:var(--muted)">${header}</thead><tbody>${body}</tbody></table>`;
+}
+
+function renderHistoryChart(rows) {
+  if (!histChart) {
+    histChart = echarts.init(document.getElementById('hist-chart'), 'dark');
+    window.addEventListener('resize', () => histChart.resize());
+  }
+  // Group by stream
+  const byStream = {};
+  rows.forEach(r => {
+    const key = `${r.sat_role===1?'SAT1':'SAT2'}/${r.stream_name}`;
+    if (!byStream[key]) byStream[key] = [];
+    byStream[key].push([r.ts_real*1000, r.value]);
+  });
+  const series = Object.entries(byStream).map(([name, data]) => ({
+    name, type: 'line', data, showSymbol: false, lineStyle: { width: 1.5 }
+  }));
+  histChart.setOption({
+    backgroundColor: 'transparent',
+    grid: { top: 40, right: 20, bottom: 60, left: 60 },
+    tooltip: { trigger: 'axis' },
+    legend: { top: 8, textStyle: { color: '#8b949e' } },
+    xAxis: { type: 'time', axisLabel: { color: '#8b949e' } },
+    yAxis: { axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#30363d' } } },
+    series,
+  });
+}
+
+// ── Diagnostics ───────────────────────────────────────────
+async function loadMetrics() {
+  try {
+    const resp = await fetch('/metrics');
+    const data = await resp.json();
+    document.getElementById('m-uptime').textContent = `${data.uptime_s}s`;
+    document.getElementById('m-rx').textContent = data.rx_frames;
+    document.getElementById('m-tx').textContent = data.tx_frames;
+    document.getElementById('m-parse-err').textContent = data.rx_parse_errors;
+    renderSatDiag(data.errors || {});
+  } catch(e) {}
+}
+
+// ── Frame trace ───────────────────────────────────────────
+let traceLines = [];
+function addTrace(cls, text) {
+  if (!traceLive && cls === 'rx') return;
+  const filter = document.getElementById('trace-filter');
+  const f = filter ? filter.value : '';
+  // Filter check (if filtering enabled, check text includes filter)
+  const log = document.getElementById('trace-log');
+  const ts = new Date().toISOString().substring(11,23);
+  const line = document.createElement('div');
+  line.className = `log-line ${cls}`;
+  line.textContent = `${ts}  ${text}`;
+  log.insertBefore(line, log.firstChild);
+  // Keep last 500 lines
+  while (log.childNodes.length > 500) log.removeChild(log.lastChild);
+}
+function clearTrace() { document.getElementById('trace-log').innerHTML = ''; }
+function toggleTraceLive() {
+  traceLive = !traceLive;
+  const btn = document.getElementById('btn-trace-live');
+  btn.textContent = traceLive ? '⏸ Pause' : '▶ Resume';
+}
+
+// ── Tabs ──────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${id}`).classList.add('active');
+  const tabs = document.querySelectorAll('.tab');
+  const labels = ['plotter','commands','history','diagnostics','trace'];
+  tabs[labels.indexOf(id)]?.classList.add('active');
+  if (id === 'plotter' && chart) { setTimeout(() => chart.resize(), 50); }
+  if (id === 'history' && histChart) { setTimeout(() => histChart.resize(), 50); }
+  if (id === 'diagnostics') loadMetrics();
+}
+
+// ── Init ──────────────────────────────────────────────────
+window.onload = () => {
+  initChart();
+  connectWS();
+  // Periodic metrics refresh
+  setInterval(loadMetrics, 15000);
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+# BCWS PC-Hub Configuration
+# All values can be overridden with environment variables prefixed BCWS_
+# e.g. BCWS_HUB_WS_PORT=9000  overrides hub.ws_port
+
+hub:
+  bind_host: "127.0.0.1"   # Use 0.0.0.0 to expose on LAN
+  ws_port: 8765
+  rest_port: 8765           # REST and WS share one aiohttp server
+  log_level: "INFO"         # DEBUG / INFO / WARNING / ERROR
+  log_dir: "logs"
+
+bridge:
+  com_port: "auto"          # "auto" = scan for USB CDC device, or e.g. "COM3"
+  baud_rate: 921600
+  network_id: 1             # 0x01 anti-mis-pairing
+  channel: 6
+
+telemetry:
+  max_rate_hz: 50           # Max WebSocket push rate per stream
+  batch_flush_ms: 200       # SQLite batch write interval ms
+
+heartbeat:
+  interval_ms: 1000
+  timeout_ms: 4000
+
+ack:
+  timeout_ms: 500
+  max_retries: 3
+
+storage:
+  db_path: "data/telemetry.db"
+  retention_hours: 24
+  vacuum_interval_hours: 6
+
+satellites:
+  SAT1:
+    role: 1
+    mac: ""   # Leave empty for auto-discovery
+  SAT2:
+    role: 2
+    mac: ""
