@@ -523,16 +523,28 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             g_lastHubHeartbeat = millis();
             g_hubOnline = true;
             if (!wasOnline) {
+                // Hub came back online (e.g. after reboot). Its in-memory telemetry
+                // dictionary (stream_id → name) has been lost. Reset all announced
+                // flags so MSG_TELEM_DICT frames are re-sent before the next batch,
+                // otherwise the hub silently drops every MSG_TELEM_BATCH entry.
+                for (int i = 0; i < g_telemStreamCount; i++) {
+                    g_telemStreamMap[i].announced = false;
+                }
                 if (g_monitorMode == MONITOR_STATUS) {
-                    USB_DEBUG_PRINTF("[SAT%d] Hub back online\n", SAT_ID);
+                    USB_DEBUG_PRINTF("[SAT%d] Hub back online – re-announcing %d dict entries\n",
+                                     SAT_ID, g_telemStreamCount);
                 }
             }
             // Always update hub MAC when it changes (handles hub reboot / NVS stale MAC)
             bool macChanged = memcmp(g_hubMac, mac, 6) != 0;
             if (!g_hubKnown || macChanged) {
                 if (g_hubKnown && macChanged) {
-                    // MAC changed – remove old peer entry before adding new one
+                    // MAC changed – remove old peer entry before adding new one.
+                    // Also reset dict flags because this is a different hub instance.
                     EspNowBridge::instance().removePeer(g_hubMac);
+                    for (int i = 0; i < g_telemStreamCount; i++) {
+                        g_telemStreamMap[i].announced = false;
+                    }
                     USB_DEBUG_PRINTF("[SAT%d] Hub MAC changed, updating\n", SAT_ID);
                 }
                 memcpy(g_hubMac, mac, 6);

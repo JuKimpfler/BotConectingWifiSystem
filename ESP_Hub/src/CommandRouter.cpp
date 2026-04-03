@@ -262,8 +262,16 @@ void CommandRouter::_broadcastTelemetry() {
         Serial.printf("[ROUTER] Stream[%d]: role=%u name=%s current=%.2f\n",
                       i, s->role, s->name, s->current);
     }
-    char buf[1024];
+    // Buffer must be large enough for all streams. With TELEM_MAX_STREAMS=32 and
+    // ~90 bytes per stream entry the JSON can reach ~3 KB; use 4096 to be safe.
+    // ArduinoJson returns the uncapped byte count (like snprintf) when the buffer
+    // is too small, so we must cap n before passing it to textAll.
+    char buf[4096];
     size_t n = serializeJson(doc, buf, sizeof(buf));
+    if (n >= sizeof(buf)) {
+        Serial.printf("[ROUTER] telemetry JSON truncated: need %u bytes\n", (unsigned)n);
+        n = sizeof(buf) - 1;
+    }
     _ws->textAll(buf, n);
 }
 
