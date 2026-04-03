@@ -99,8 +99,8 @@ CRC is computed over all bytes from offset 0 to offset 187 inclusive (header + p
 
 #### Test Vector A
 ```
-Frame (hex, first 8 bytes only, payload=0x00×180):
-  BE 01 00 00 FF 00 00 01  [00 × 180]
+Frame (hex, first 8 bytes only, payload=0x00 x 180):
+  BE 01 00 00 FF 00 00 01  [00 x 180]
 Expected CRC: 0x5ECB  (stored as CB 5E at offsets 188–189)
 ```
 

@@ -100,7 +100,7 @@ $ConfigFile   = Join-Path $ConfigDir "hub_config.yaml"
 Write-Host ""
 Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
 Write-Host "║   BCWS PC-Hub — Windows Setup Script                        ║" -ForegroundColor Magenta
-Write-Host "║   BotConectingWifiSystem hub migration bootstrap             ║" -ForegroundColor Magenta
+Write-Host "║   BotConnectingWifiSystem hub migration bootstrap            ║" -ForegroundColor Magenta
 Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
 Write-Host ""
 Write-Info "Migration dir : $MigrationDir"
