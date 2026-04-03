@@ -51,8 +51,6 @@ void AckManager::tick(bool (*sendFn)(const uint8_t *mac, const Frame_t *frame)) 
         if ((now - _queue[i].sentAt) < ACK_TIMEOUT_MS) continue;
 
         if (_queue[i].retries >= ACK_MAX_RETRIES) {
-            Serial.printf("[ACK] seq %u timed out after %d retries\n",
-                          _queue[i].seq, ACK_MAX_RETRIES);
             _queue[i].active = false;
             continue;
         }
@@ -61,8 +59,6 @@ void AckManager::tick(bool (*sendFn)(const uint8_t *mac, const Frame_t *frame)) 
         _queue[i].retries++;
         _queue[i].sentAt = now;
         sendFn(_queue[i].mac, reinterpret_cast<Frame_t *>(_queue[i].frameData));
-        Serial.printf("[ACK] resending seq %u (retry %u)\n",
-                      _queue[i].seq, _queue[i].retries);
     }
 }
 

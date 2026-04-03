@@ -24,10 +24,6 @@ static uint8_t g_seq = 0;
 // UART1 for Teensy
 HardwareSerial TeensySerial(1);
 
-#define LIGHT_DEBUG_PRINTF(...) Serial.printf(__VA_ARGS__)
-#define LIGHT_DEBUG_PRINT(...)  Serial.print(__VA_ARGS__)
-#define LIGHT_DEBUG_PRINTLN(...) Serial.println(__VA_ARGS__)
-
 // ── Heartbeat tracking ────────────────────────────────────────
 static uint32_t g_lastHubHeartbeat = 0;
 static uint32_t g_lastHbSent = 0;
@@ -53,7 +49,6 @@ static uint32_t g_lastTelemFlush = 0;
 // Performance counters
 static uint32_t g_telemSentCount = 0;
 static uint32_t g_telemDropCount = 0;
-static uint32_t g_lastStatsReport = 0;
 
 static int findTelemetryStreamByName(const char *name) {
     if (!name || name[0] == '\0') return -1;
@@ -145,25 +140,14 @@ static bool flushTelemetryQueue(bool force) {
     uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
     memcpy(frame.payload + frame.len, &crc, 2);
 
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Flushing telem batch: qlen=%d seq=%d force=%d\n",
-                       SAT_ID, g_telemQueueLen, frame.seq, force ? 1 : 0);
-
     bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
     if (ok) {
         g_telemSentCount += g_telemQueueLen;
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem batch sent OK: %d values, total sent=%lu\n",
-                           SAT_ID, g_telemQueueLen, g_telemSentCount);
         g_telemQueueLen = 0;
         g_lastTelemFlush = now;
-    } else {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem batch send FAILED\n", SAT_ID);
     }
     return ok;
 }
-
-// ─── USB serial command handler ──────────────────────────────
-static char s_serialCmdBuf[64];
-static int  s_serialCmdIdx = 0;
 
 static bool forwardTelemetryLine(const char *line) {
     if (!line) return false;
@@ -177,13 +161,11 @@ static bool forwardTelemetryLine(const char *line) {
 
     const char *eq = strchr(payload, '=');
     if (!eq) {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem parse error: no '=' in line\n", SAT_ID);
         return false;
     }
 
     size_t nameLen = (size_t)(eq - payload);
     if (nameLen == 0 || nameLen >= TELEM_NAME_MAX_LEN) {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem parse error: name length %u\n", SAT_ID, (unsigned)nameLen);
         return false;
     }
 
@@ -193,23 +175,18 @@ static bool forwardTelemetryLine(const char *line) {
     strncpy(valueStr, eq + 1, sizeof(valueStr) - 1);
     valueStr[sizeof(valueStr) - 1] = '\0';
 
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem recv: %s=%s\n", SAT_ID, name, valueStr);
-
     if (!g_hubKnown) {
         g_telemDropCount++;
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem dropped: hub unknown\n", SAT_ID);
         return false;
     }
 
     int streamIdx = ensureTelemetryStream(name);
     if (streamIdx < 0) {
         g_telemDropCount++;
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem dropped: stream table full\n", SAT_ID);
         return false;
     }
 
     if (!sendTelemetryDict((uint8_t)streamIdx)) {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem dict send failed for stream %d\n", SAT_ID, streamIdx);
         return false;
     }
 
@@ -243,58 +220,9 @@ static bool forwardTelemetryLine(const char *line) {
     }
 
     g_telemQueueLen++;
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telem queued: stream=%d type=%d qlen=%d\n",
-                       SAT_ID, streamIdx, v.vtype, g_telemQueueLen);
     flushTelemetryQueue(false);  // Try to flush (respects interval)
 
     return true;
-}
-
-static void handleSerialCmd(const char *cmd) {
-    if (!cmd || cmd[0] == '\0') return;
-
-    if (strcasecmp(cmd, "info") == 0 || strcasecmp(cmd, "mac") == 0) {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Own MAC : %s\n", SAT_ID, WiFi.macAddress().c_str());
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Channel : %u\n", SAT_ID, g_channel);
-        if (g_hubKnown) {
-            LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub MAC : %02X:%02X:%02X:%02X:%02X:%02X\n",
-                          SAT_ID,
-                          g_hubMac[0], g_hubMac[1], g_hubMac[2],
-                          g_hubMac[3], g_hubMac[4], g_hubMac[5]);
-        } else {
-            LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub MAC : unknown\n", SAT_ID);
-        }
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub online: %s\n", SAT_ID, g_hubOnline ? "yes" : "no");
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Streams: %u/%u\n", SAT_ID, g_telemStreamCount, LIGHT_TELEM_MAX_STREAMS);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Sent: %lu  Dropped: %lu\n", SAT_ID, g_telemSentCount, g_telemDropCount);
-    } else if (strcasecmp(cmd, "stats") == 0) {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] === Performance Stats ===\n", SAT_ID);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Uptime      : %lu ms\n", SAT_ID, (unsigned long)millis());
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Streams     : %u/%u\n", SAT_ID, g_telemStreamCount, LIGHT_TELEM_MAX_STREAMS);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Queue depth : %u/%u\n", SAT_ID, g_telemQueueLen, LIGHT_TELEM_BATCH_SIZE);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Sent values : %lu\n", SAT_ID, g_telemSentCount);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Dropped     : %lu\n", SAT_ID, g_telemDropCount);
-        uint32_t rate = (millis() > 0) ? (g_telemSentCount * 1000UL / millis()) : 0;
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Avg rate    : %lu values/sec\n", SAT_ID, rate);
-    } else if (strcasecmp(cmd, "clearmac") == 0) {
-        g_hubKnown = false;
-        memset(g_hubMac, 0, 6);
-        Preferences prefs;
-        prefs.begin(NVS_NAMESPACE, false);
-        prefs.remove(NVS_KEY_HUB_MAC);
-        prefs.end();
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Stored Hub MAC cleared\n", SAT_ID);
-    } else if (strcasecmp(cmd, "help") == 0) {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] === LIGHT TELEMETRY-ONLY VERSION ===\n", SAT_ID);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Commands: info | stats | clearmac | help\n", SAT_ID);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Telemetry: DBG:<name>=<value>\n", SAT_ID);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Features: TELEMETRY ONLY\n", SAT_ID);
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Disabled: P2P, Control, Modes, LEDs, Buttons\n", SAT_ID);
-    } else if (forwardTelemetryLine(cmd)) {
-        // Telemetry injected via USB
-    } else {
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Unknown command '%s'. Type 'help'.\n", SAT_ID, cmd);
-    }
 }
 
 // ─── Load config from NVS ────────────────────────────────────
@@ -308,9 +236,6 @@ static void loadConfig() {
     g_hubKnown = (n == 6);
 
     prefs.end();
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] ch=%u hub=%s\n",
-                  SAT_ID, g_channel,
-                  g_hubKnown ? "known" : "unknown");
 }
 
 // ─── Build and send a frame helper ───────────────────────────
@@ -338,9 +263,6 @@ static bool sendFrame(const uint8_t *mac, uint8_t msgType,
 
 // ─── ESP-NOW receive callback ─────────────────────────────────
 static void onFrame(const uint8_t *mac, const Frame_t *frame) {
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Frame rx: type=0x%02X seq=%u src_role=%u\n",
-                       SAT_ID, frame->msg_type, frame->seq, frame->src_role);
-
     if (frame->msg_type == MSG_HEARTBEAT) {
         // Hub heartbeat received
         if (frame->src_role == ROLE_HUB) {
@@ -349,13 +271,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             g_hubOnline = true;
 
             if (!wasOnline) {
-                // Hub came back online – its in-memory telemetry dictionary
-                // (stream_id → name) has been lost. Reset all announced flags so
-                // MSG_TELEM_DICT frames are re-sent before the next batch, otherwise
-                // the hub silently drops every MSG_TELEM_BATCH entry.
                 resetTelemAnnouncedFlags();
-                LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub came ONLINE – re-announcing %d dict entries\n",
-                                   SAT_ID, g_telemStreamCount);
             }
 
             // Always update hub MAC when it changes
@@ -363,9 +279,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             if (!g_hubKnown || macChanged) {
                 if (g_hubKnown && macChanged) {
                     EspNowBridge::instance().removePeer(g_hubMac);
-                    // Also reset dict flags – new hub instance has empty dictionary
                     resetTelemAnnouncedFlags();
-                    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub MAC changed – re-announcing dict\n", SAT_ID);
                 }
                 memcpy(g_hubMac, mac, 6);
                 g_hubKnown = true;
@@ -374,9 +288,6 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
                 prefs.begin(NVS_NAMESPACE, false);
                 prefs.putBytes(NVS_KEY_HUB_MAC, g_hubMac, 6);
                 prefs.end();
-                LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub MAC saved: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                              SAT_ID,
-                              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
             }
         }
     } else if (frame->msg_type == MSG_DISCOVERY) {
@@ -403,10 +314,6 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
                 prefs.begin(NVS_NAMESPACE, false);
                 prefs.putBytes(NVS_KEY_HUB_MAC, g_hubMac, 6);
                 prefs.end();
-                LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub MAC learned via discovery: "
-                              "%02X:%02X:%02X:%02X:%02X:%02X\n",
-                              SAT_ID,
-                              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
             }
 
             EspNowBridge::instance().addPeer(mac);
@@ -426,11 +333,6 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
 
 // ─── Setup ────────────────────────────────────────────────────
 void setup() {
-    Serial.begin(115200);
-    delay(400);
-    LIGHT_DEBUG_PRINTF("\n[SAT%d-LIGHT] === TELEMETRY-ONLY VERSION ===\n", SAT_ID);
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Optimized for high-rate smooth plotting\n", SAT_ID);
-
     loadConfig();
 
     // NO LEDs in light version
@@ -443,10 +345,6 @@ void setup() {
 
     // Register hub if known
     if (g_hubKnown) bridge.addPeer(g_hubMac);
-
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Ready – MAC: %s  ch=%u\n",
-                  SAT_ID, WiFi.macAddress().c_str(), g_channel);
-    LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Type 'help' for commands\n", SAT_ID);
 }
 
 // ─── Loop ─────────────────────────────────────────────────────
@@ -482,17 +380,13 @@ void loop() {
         hb.uptime_ms = now;
         hb.rssi      = 0;
         hb.queue_len = g_telemQueueLen;
-        bool hbOk = sendFrame(g_hubMac, MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Heartbeat sent: %s (qlen=%d)\n",
-                           SAT_ID, hbOk ? "OK" : "FAIL", g_telemQueueLen);
+        sendFrame(g_hubMac, MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
     }
 
     // ── Hub online/offline detection ──────────────────────────
     if (g_hubOnline && g_hubKnown &&
         (now - g_lastHubHeartbeat) > HEARTBEAT_TIMEOUT_MS) {
         g_hubOnline = false;
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub went OFFLINE (timeout=%lums)\n",
-                           SAT_ID, (unsigned long)(now - g_lastHubHeartbeat));
     }
 
     // ── Telemetry flush tick (ultra-aggressive) ───────────────
@@ -500,30 +394,4 @@ void loop() {
 
     // ── ESP-NOW tick ──────────────────────────────────────────
     EspNowBridge::instance().tick();
-
-    // ── USB serial command handler ────────────────────────────
-    while (Serial.available()) {
-        char c = (char)Serial.read();
-        if (c == '\n' || c == '\r') {
-            if (s_serialCmdIdx > 0) {
-                s_serialCmdBuf[s_serialCmdIdx] = '\0';
-                handleSerialCmd(s_serialCmdBuf);
-                s_serialCmdIdx = 0;
-            }
-        } else {
-            if (s_serialCmdIdx < (int)(sizeof(s_serialCmdBuf) - 1)) {
-                s_serialCmdBuf[s_serialCmdIdx++] = c;
-            } else {
-                s_serialCmdIdx = 0;  // Buffer overflow
-            }
-        }
-    }
-
-    // ── Periodic stats output ─────────────────────────────────
-    if ((now - g_lastStatsReport) >= 30000) {
-        g_lastStatsReport = now;
-        uint32_t rate = (now > 0) ? (g_telemSentCount * 1000UL / now) : 0;
-        LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Stats: %u streams, %lu sent, %lu dropped, %lu val/s\n",
-                      SAT_ID, g_telemStreamCount, g_telemSentCount, g_telemDropCount, rate);
-    }
 }
