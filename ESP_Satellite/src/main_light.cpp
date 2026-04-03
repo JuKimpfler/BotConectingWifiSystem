@@ -66,6 +66,12 @@ static int findTelemetryStreamByName(const char *name) {
     return -1;
 }
 
+static void resetTelemAnnouncedFlags() {
+    for (int i = 0; i < g_telemStreamCount; i++) {
+        g_telemStreamMap[i].announced = false;
+    }
+}
+
 static int ensureTelemetryStream(const char *name) {
     int idx = findTelemetryStreamByName(name);
     if (idx >= 0) return idx;
@@ -347,9 +353,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
                 // (stream_id → name) has been lost. Reset all announced flags so
                 // MSG_TELEM_DICT frames are re-sent before the next batch, otherwise
                 // the hub silently drops every MSG_TELEM_BATCH entry.
-                for (int i = 0; i < g_telemStreamCount; i++) {
-                    g_telemStreamMap[i].announced = false;
-                }
+                resetTelemAnnouncedFlags();
                 LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub came ONLINE – re-announcing %d dict entries\n",
                                    SAT_ID, g_telemStreamCount);
             }
@@ -360,9 +364,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
                 if (g_hubKnown && macChanged) {
                     EspNowBridge::instance().removePeer(g_hubMac);
                     // Also reset dict flags – new hub instance has empty dictionary
-                    for (int i = 0; i < g_telemStreamCount; i++) {
-                        g_telemStreamMap[i].announced = false;
-                    }
+                    resetTelemAnnouncedFlags();
                     LIGHT_DEBUG_PRINTF("[SAT%d-LIGHT] Hub MAC changed – re-announcing dict\n", SAT_ID);
                 }
                 memcpy(g_hubMac, mac, 6);
