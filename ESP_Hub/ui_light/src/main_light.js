@@ -285,7 +285,8 @@ function _renderTable() {
   const frag = document.createDocumentFragment()
 
   const sorted = Array.from(currentValues.entries()).sort((a, b) => {
-    const ra = a[1].role || 99, rb = b[1].role || 99
+    const ra = Number(a[1].role) || 0
+    const rb = Number(b[1].role) || 0
     if (ra !== rb) return ra - rb
     return a[1].name.localeCompare(b[1].name)
   })
@@ -296,7 +297,8 @@ function _renderTable() {
       refs = _createTableRow()
       tableRows.set(key, refs)
     }
-    refs.roleTd.textContent = s.role ? `SAT${s.role}` : 'SAT'
+    const roleNum = Number(s.role) || 0
+    refs.roleTd.textContent = roleNum > 0 ? `SAT${roleNum}` : 'SAT'
     refs.nameTd.textContent = s.name
     refs.curTd.textContent  = fmt(s.current)
     refs.minTd.textContent  = fmt(s.min)

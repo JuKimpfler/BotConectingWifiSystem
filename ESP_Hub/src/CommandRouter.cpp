@@ -254,10 +254,16 @@ void CommandRouter::_broadcastTelemetry() {
     if (cnt == 0) return;
 
 #ifdef HUB_LIGHT_MODE
-    // ── Light-mode fast path ─────────────────────────────────────
-    // Hand-rolled JSON builder avoids ArduinoJson heap alloc and
-    // cuts serialisation overhead significantly at 50 Hz.
-    // Buffer is static to avoid stack churn; textAll() copies it internally.
+    // Light-mode fast path JSON serialiser.
+    // Named constants for buffer thresholds:
+    //   JSON_ENTRY_MAX_BYTES – maximum bytes a single entry can occupy:
+    //     comma(1) + {"role":2,"name":"<16 chars>","current":-1.23456e+38,
+    //                 "min":-1.23456e+38,"max":-1.23456e+38} ≈ 92 bytes.
+    //     120 gives comfortable headroom.
+    //   JSON_SUFFIX_BYTES    – closing ']', '}', NUL terminator.
+    static constexpr int JSON_ENTRY_MAX_BYTES = 120;
+    static constexpr int JSON_SUFFIX_BYTES    = 3;
+
     static char buf[2048];
     int pos = 0;
     int rem = (int)sizeof(buf);
@@ -271,8 +277,8 @@ void CommandRouter::_broadcastTelemetry() {
         StreamStat *s = _telem->getStream(i);
         if (!s || !s->valid) continue;
 
-        // Ensure at least 120 bytes remain before writing the next entry
-        if (rem < 120) break;
+        // Ensure enough space remains for the next entry.
+        if (rem < JSON_ENTRY_MAX_BYTES) break;
 
         if (!first) { buf[pos++] = ','; rem--; }
         first = false;
@@ -287,7 +293,11 @@ void CommandRouter::_broadcastTelemetry() {
         pos += w; rem -= w;
     }
 
-    if (rem < 3) return; // Safety: should not happen given the 120-byte guard above
+    if (rem < JSON_SUFFIX_BYTES) {
+        // Buffer was exhausted mid-message – log and drop (indicates a sizing issue).
+        Serial.println("[ROUTER] _broadcastTelemetry: buffer overflow, telemetry dropped");
+        return;
+    }
     buf[pos++] = ']';
     buf[pos++] = '}';
     buf[pos]   = '\0';

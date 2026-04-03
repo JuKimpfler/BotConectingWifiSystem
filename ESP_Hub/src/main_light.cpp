@@ -105,9 +105,15 @@ void setup() {
     }
 
     // Telemetry buffer – in light mode enforce at least TELEMETRY_MAX_HZ (50 Hz).
-    // The persisted config may contain a lower value (e.g. 20 Hz default);
-    // clamp upward so the light hub always flushes at ≥ 50 Hz (20 ms interval).
+    // The persisted config may contain a lower value (e.g. 20 Hz default).
+    // This override is intentional: the light hub is purpose-built for high-
+    // frequency telemetry and should always run at the maximum rate.  The
+    // change is NOT written back to flash so the stored config is preserved
+    // and will take full effect again when flashing the normal firmware.
     if (hubCfg.telemetry_max_hz < TELEMETRY_MAX_HZ) {
+        Serial.printf("[HUB-LIGHT] Stored telemetry_max_hz=%u below light-mode minimum; "
+                      "overriding to %u Hz for this session only.\n",
+                      hubCfg.telemetry_max_hz, (unsigned)TELEMETRY_MAX_HZ);
         hubCfg.telemetry_max_hz = TELEMETRY_MAX_HZ;
     }
     telem.begin(1000u / hubCfg.telemetry_max_hz);
