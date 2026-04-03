@@ -12,14 +12,20 @@ EspNowManager &EspNowManager::instance() {
     return instance;
 }
 
-bool EspNowManager::begin(uint8_t channel, const char *pmk16) {
+bool EspNowManager::begin(uint8_t channel, const char *pmk16,
+                          const char *apSsid, const char *apPassword,
+                          const char *dnsHostname) {
     _channel = channel;
 
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(AP_SSID, AP_PASSWORD, channel);
+    const char *ssid     = apSsid      ? apSsid      : AP_SSID;
+    const char *password = apPassword  ? apPassword  : AP_PASSWORD;
+    const char *hostname = dnsHostname ? dnsHostname : DNS_HOSTNAME;
 
-    // Start DNS server so the hub is reachable as http://esp.hub
-    if (!_dns.start(53, DNS_HOSTNAME, WiFi.softAPIP())) {
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(ssid, password, channel);
+
+    // Start DNS server so the hub is reachable as http://esp.hub (or esp.light)
+    if (!_dns.start(53, hostname, WiFi.softAPIP())) {
         Serial.println("[DNS] failed to start DNS server on port 53");
     }
 
@@ -199,9 +205,13 @@ void EspNowManager::_onRecv(const uint8_t *mac,
         return;
     }
 
+    // Log received frame – suppressed in light mode to keep the 50 Hz telemetry
+    // path free from Serial overhead.
+#ifndef HUB_LIGHT_MODE
     Serial.printf("[ESPNOW] rx from %02X:%02X:%02X:%02X:%02X:%02X type=0x%02X seq=%u role=%u nid=0x%02X\n",
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                   f->msg_type, f->seq, f->src_role, f->network_id);
+#endif
 
     EspNowManager &self = instance();
 

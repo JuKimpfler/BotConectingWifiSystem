@@ -92,8 +92,10 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
         if (frame->len < sizeof(TelemetryDictPayload_t)) break;
         const TelemetryDictPayload_t *dict =
             reinterpret_cast<const TelemetryDictPayload_t *>(frame->payload);
+#ifndef HUB_LIGHT_MODE
         Serial.printf("[ROUTER] TELEM_DICT: role=%u stream_id=%u name=%s\n",
                       frame->src_role, dict->stream_id, dict->name);
+#endif
         _upsertDictName(frame->src_role, dict->stream_id, dict->name);
         break;
     }
@@ -105,16 +107,22 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
         const uint8_t count = frame->len / sizeof(TelemetryCompactValue_t);
         const TelemetryCompactValue_t *vals =
             reinterpret_cast<const TelemetryCompactValue_t *>(frame->payload);
+#ifndef HUB_LIGHT_MODE
         Serial.printf("[ROUTER] TELEM_BATCH: role=%u count=%u\n", frame->src_role, count);
+#endif
         for (uint8_t i = 0; i < count; i++) {
             const char *name = _dictNameFor(frame->src_role, vals[i].stream_id);
             if (!name) {
+#ifndef HUB_LIGHT_MODE
                 Serial.printf("[ROUTER] TELEM_BATCH: unknown stream_id=%u for role=%u\n",
                               vals[i].stream_id, frame->src_role);
+#endif
                 continue;
             }
+#ifndef HUB_LIGHT_MODE
             Serial.printf("[ROUTER] TELEM_BATCH[%u]: stream_id=%u name=%s type=%u raw=%ld\n",
                           i, vals[i].stream_id, name, vals[i].vtype, (long)vals[i].raw);
+#endif
             TelemetryEntry_t entry = {};
             compactValueToTelemetryEntry(&vals[i], name, &entry);
             _telem->ingest(&entry, frame->src_role);
@@ -125,8 +133,10 @@ void CommandRouter::onEspNowFrame(const uint8_t *mac, const Frame_t *frame) {
     case MSG_DBG: {
         const TelemetryEntry_t *entry =
             reinterpret_cast<const TelemetryEntry_t *>(frame->payload);
+#ifndef HUB_LIGHT_MODE
         Serial.printf("[ROUTER] telemetry from role=%u: %s\n",
                       frame->src_role, entry->name);
+#endif
         _telem->ingest(entry, frame->src_role);
         // Confirmed data receipt – mark data path healthy
         _peers->markDataOk(mac);
@@ -241,10 +251,62 @@ void CommandRouter::broadcastPeerStatus() {
 void CommandRouter::_broadcastTelemetry() {
     if (!_ws || !_telem) return;
     int cnt = _telem->streamCount();
-
-    Serial.printf("[ROUTER] Broadcasting telemetry (stream count=%d)\n", cnt);
-
     if (cnt == 0) return;
+
+#ifdef HUB_LIGHT_MODE
+    // Light-mode fast path JSON serialiser.
+    // Named constants for buffer thresholds:
+    //   JSON_ENTRY_MAX_BYTES – maximum bytes a single entry can occupy:
+    //     comma(1) + {"role":2,"name":"<16 chars>","current":-1.23456e+38,
+    //                 "min":-1.23456e+38,"max":-1.23456e+38} ≈ 92 bytes.
+    //     120 gives comfortable headroom.
+    //   JSON_SUFFIX_BYTES    – closing ']', '}', NUL terminator.
+    static constexpr int JSON_ENTRY_MAX_BYTES = 120;
+    static constexpr int JSON_SUFFIX_BYTES    = 3;
+
+    static char buf[2048];
+    int pos = 0;
+    int rem = (int)sizeof(buf);
+
+    int w = snprintf(buf + pos, rem, "{\"type\":\"telemetry\",\"streams\":[");
+    if (w < 0 || w >= rem) return;
+    pos += w; rem -= w;
+
+    bool first = true;
+    for (int i = 0; i < cnt; i++) {
+        StreamStat *s = _telem->getStream(i);
+        if (!s || !s->valid) continue;
+
+        // Ensure enough space remains for the next entry.
+        if (rem < JSON_ENTRY_MAX_BYTES) break;
+
+        if (!first) { buf[pos++] = ','; rem--; }
+        first = false;
+
+        // Use %g to emit compact numbers (drops trailing zeros)
+        w = snprintf(buf + pos, rem,
+                     "{\"role\":%u,\"name\":\"%s\","
+                     "\"current\":%.6g,\"min\":%.6g,\"max\":%.6g}",
+                     s->role, s->name,
+                     (double)s->current, (double)s->minVal, (double)s->maxVal);
+        if (w < 0 || w >= rem) break;
+        pos += w; rem -= w;
+    }
+
+    if (rem < JSON_SUFFIX_BYTES) {
+        // Buffer was exhausted mid-message – log and drop (indicates a sizing issue).
+        Serial.println("[ROUTER] _broadcastTelemetry: buffer overflow, telemetry dropped");
+        return;
+    }
+    buf[pos++] = ']';
+    buf[pos++] = '}';
+    buf[pos]   = '\0';
+
+    _ws->textAll(buf, pos);
+
+#else
+    // ── Normal path ──────────────────────────────────────────────
+    Serial.printf("[ROUTER] Broadcasting telemetry (stream count=%d)\n", cnt);
 
     JsonDocument doc;
     doc["type"] = "telemetry";
@@ -273,6 +335,7 @@ void CommandRouter::_broadcastTelemetry() {
         n = sizeof(buf) - 1;
     }
     _ws->textAll(buf, n);
+#endif
 }
 
 void CommandRouter::_handleCtrl(const char *json) {

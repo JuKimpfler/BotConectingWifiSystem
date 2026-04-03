@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP-NOW Hub Light</title>
+  <script type="module" crossorigin src="/assets/index-DS541jvd.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-C_6EmJd3.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header class="header">
+      <span class="logo">ESP-Hub ⚡ Light</span>
+      <div class="peer-badges">
+        <span id="badge-sat1" class="badge offline">SAT1 –</span>
+        <span id="badge-sat2" class="badge offline">SAT2 –</span>
+        <span id="ws-status" class="badge offline">WS</span>
+      </div>
+    </header>
+
+    <!-- Tab navigation -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="plotter">Plotter</button>
+      <button class="tab" data-tab="table">Tabelle</button>
+    </nav>
+
+    <!-- ── PLOTTER ─────────────────────────────────────────── -->
+    <section id="tab-plotter" class="tab-panel active">
+      <div class="panel">
+        <div class="plotter-wrap">
+          <canvas id="telem-plot"></canvas>
+        </div>
+        <div id="plot-legend" class="plot-legend"></div>
+        <p id="plot-empty" class="plot-empty">Warte auf Telemetrie-Daten…</p>
+      </div>
+    </section>
+
+    <!-- ── TABELLE ─────────────────────────────────────────── -->
+    <section id="tab-table" class="tab-panel">
+      <div class="panel">
+        <h2>Telemetry Streams</h2>
+        <table id="telem-table">
+          <thead>
+            <tr><th>SAT</th><th>Stream</th><th>Current</th><th>Min</th><th>Max</th></tr>
+          </thead>
+          <tbody id="telem-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+</body>
+</html>

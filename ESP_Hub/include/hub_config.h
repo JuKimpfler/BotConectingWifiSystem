@@ -76,9 +76,17 @@
 
 // ── WiFi / ESP-NOW ────────────────────────────────────────────
 #define DEFAULT_CHANNEL      6
+// AP_SSID, AP_PASSWORD and DNS_HOSTNAME are wrapped in #ifndef so they can be
+// overridden at compile time via build_flags (e.g. for the light mode environment).
+#ifndef AP_SSID
 #define AP_SSID              "ESP-Hub"
+#endif
+#ifndef AP_PASSWORD
 #define AP_PASSWORD          "hub12345"
+#endif
+#ifndef DNS_HOSTNAME
 #define DNS_HOSTNAME         "esp.hub"
+#endif
 
 // ── Config file in LittleFS ───────────────────────────────────
 #define CONFIG_FILE          "/config.json"
@@ -91,7 +99,10 @@
 #define WS_PATH              "/ws"
 
 // ── Telemetry throttle ────────────────────────────────────────
+// TELEMETRY_MAX_HZ can be overridden via build_flags for the light environment.
+#ifndef TELEMETRY_MAX_HZ
 #define TELEMETRY_MAX_HZ     20
+#endif
 #define TELEMETRY_MIN_INTERVAL_MS  (1000 / TELEMETRY_MAX_HZ)
 
 // ── Heartbeat ─────────────────────────────────────────────────

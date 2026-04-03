@@ -2,7 +2,9 @@
 PlatformIO extra script for ESP_Hub filesystem handling.
 
 What it does:
-- Builds the Vite UI (ESP_Hub/ui -> ESP_Hub/data) before buildfs/uploadfs.
+- Builds the Vite UI before buildfs/uploadfs.
+  • Normal envs (esp_hub, esp_hub_c6):         ui/       → data/
+  • Light envs  (esp_hub_light, esp_hub_c6_light): ui_light/ → data_light/
 - On normal firmware upload, triggers uploadfs first so UI updates are
     flashed automatically as part of one upload workflow.
 """
@@ -15,13 +17,19 @@ from SCons.Script import COMMAND_LINE_TARGETS
 Import("env")  # noqa: F821 – injected by PlatformIO
 
 
+def _is_light_env(env) -> bool:
+    return "light" in env.subst("$PIOENV")
+
+
 def _build_ui(env):
     project_dir = env.subst("$PROJECT_DIR")  # …/ESP_Hub
-    ui_dir = os.path.join(project_dir, "ui")
+    light = _is_light_env(env)
+    ui_subdir = "ui_light" if light else "ui"
+    ui_dir = os.path.join(project_dir, ui_subdir)
 
     if not os.path.isdir(ui_dir):
         sys.exit(
-            "[pre_build_fs] ERROR: ui/ directory not found at {}".format(ui_dir)
+            "[pre_build_fs] ERROR: {} directory not found at {}".format(ui_subdir, ui_dir)
         )
 
     npm = "npm.cmd" if sys.platform == "win32" else "npm"
@@ -30,12 +38,13 @@ def _build_ui(env):
     # To force a clean reinstall, delete node_modules manually and rerun.
     node_modules = os.path.join(ui_dir, "node_modules")
     if not os.path.isdir(node_modules):
-        print("[pre_build_fs] Running: npm install")
+        print("[pre_build_fs] Running: npm install  (in {})".format(ui_subdir))
         result = subprocess.run([npm, "install"], cwd=ui_dir)
         if result.returncode != 0:
             sys.exit("[pre_build_fs] ERROR: 'npm install' failed (see output above)")
 
-    print("[pre_build_fs] Running: npm run build  (output → ESP_Hub/data/)")
+    out_dir = "data_light" if light else "data"
+    print("[pre_build_fs] Running: npm run build  (output → ESP_Hub/{})".format(out_dir))
     result = subprocess.run([npm, "run", "build"], cwd=ui_dir)
     if result.returncode != 0:
         sys.exit("[pre_build_fs] ERROR: 'npm run build' failed (see output above)")
