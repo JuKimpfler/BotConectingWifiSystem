@@ -1,4 +1,4 @@
-aiohttp==3.9.5
+aiohttp==3.13.3
 aiosqlite==0.20.0
 pyserial==3.5
 pyserial-asyncio==0.6
