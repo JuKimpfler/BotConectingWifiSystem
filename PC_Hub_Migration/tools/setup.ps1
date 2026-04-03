@@ -188,7 +188,7 @@ pyserial-asyncio==0.6
 websockets==12.0
 
 # HTTP REST API
-aiohttp==3.9.5
+aiohttp==3.13.3
 
 # YAML configuration parsing
 PyYAML==6.0.1
