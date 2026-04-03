@@ -183,6 +183,10 @@ bool BotConnect::sendP2P(const char *message) {
     return true;
 }
 
+bool BotConnect::sendP2P(const String &message) {
+    return sendP2P(message.c_str());
+}
+
 bool BotConnect::sendP2P(const uint8_t *data, size_t len) {
     if (!_serial || !data || len == 0) return false;
     // Copy into bounded buffer to guarantee newline termination

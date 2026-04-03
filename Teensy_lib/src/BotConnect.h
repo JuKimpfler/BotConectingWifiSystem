@@ -86,6 +86,8 @@ public:
     // ── P2P communication ─────────────────────────────────────
     // Send a message to peer robot (via P2P bridge, no DBG: prefix)
     bool sendP2P(const char *message);
+    // Send an Arduino String message to peer robot
+    bool sendP2P(const String &message);
     // Send binary-safe payload (appends newline if not present)
     bool sendP2P(const uint8_t *data, size_t len);
     // Check if queued P2P messages are available (FIFO, ordered)
