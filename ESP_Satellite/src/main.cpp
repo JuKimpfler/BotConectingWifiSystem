@@ -381,6 +381,11 @@ static bool forwardUartRawToPeer(const char *line) {
     return ok;
 }
 
+// Arduino String overload – delegates to the const char * version
+static bool forwardUartRawToPeer(const String &str) {
+    return forwardUartRawToPeer(str.c_str());
+}
+
 static bool routePayloadLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel || line[0] == '\0') return false;
     if (strncmp(line, DBG_PREFIX, strlen(DBG_PREFIX)) == 0) {
