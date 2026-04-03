@@ -19,7 +19,9 @@ typedef void (*FrameRecvCb)(const uint8_t *mac, const Frame_t *frame);
 
 class EspNowManager {
 public:
-    bool begin(uint8_t channel, const char *pmk16 = nullptr);
+    bool begin(uint8_t channel, const char *pmk16 = nullptr,
+               const char *apSsid = nullptr, const char *apPassword = nullptr,
+               const char *dnsHostname = nullptr);
     bool addPeer(const uint8_t *mac, const char *ltk16 = nullptr);
     bool removePeer(const uint8_t *mac);
     bool send(const uint8_t *mac, const Frame_t *frame);
