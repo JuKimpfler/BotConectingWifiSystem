@@ -71,6 +71,12 @@ public:
     // ── P2P callback (optional) ───────────────────────────────
     void onP2P(OnP2PCb cb) { _onP2P = cb; }
 
+    // ── Decoder helpers ───────────────────────────────────────
+    // Decode the switches integer (bit0=SW1, bit1=SW2, bit2=SW3)
+    void decodeSwitches(bool &sw1, bool &sw2, bool &sw3) const;
+    // Decode the buttons integer (bit0=B1, bit1=B2, bit2=B3, bit3=B4)
+    void decodeButtons(bool &btn1, bool &btn2, bool &btn3, bool &btn4) const;
+
     // ── Telemetry helpers ─────────────────────────────────────
     // Send a named integer stream value
     void sendTelemetryInt(const char *name, int32_t value);
@@ -156,6 +162,9 @@ public:
 
     void begin(TwoWire &wire = Wire, uint8_t address = 0x03);
     void process();
+
+    void decodeSwitches(bool &sw1, bool &sw2, bool &sw3) const;
+    void decodeButtons(bool &btn1, bool &btn2, bool &btn3, bool &btn4) const;
 
     void sendTelemetryInt(const char *name, int32_t value);
     void sendTelemetryFloat(const char *name, float value);

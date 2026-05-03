@@ -157,6 +157,19 @@ void BotConnect::LedUpdate() {
     sendTelemetryBool("Led4", led4);
 }
 
+void BotConnect::decodeSwitches(bool &sw1, bool &sw2, bool &sw3) const {
+    sw1 = switches & 0x01;
+    sw2 = (switches >> 1) & 0x01;
+    sw3 = (switches >> 2) & 0x01;
+}
+
+void BotConnect::decodeButtons(bool &btn1, bool &btn2, bool &btn3, bool &btn4) const {
+    btn1 = buttons & 0x01;
+    btn2 = (buttons >> 1) & 0x01;
+    btn3 = (buttons >> 2) & 0x01;
+    btn4 = (buttons >> 3) & 0x01;
+}
+
 void BotConnect::sendAck(uint8_t seq, uint8_t status) {
     if (!_serial) return;
     char buf[32];
@@ -309,6 +322,19 @@ void BotConnect_i2C::LedUpdate() {
     sendTelemetryBool("Led2", led2);
     sendTelemetryBool("Led3", led3);
     sendTelemetryBool("Led4", led4);
+}
+
+void BotConnect_i2C::decodeSwitches(bool &sw1, bool &sw2, bool &sw3) const {
+    sw1 = switches & 0x01;
+    sw2 = (switches >> 1) & 0x01;
+    sw3 = (switches >> 2) & 0x01;
+}
+
+void BotConnect_i2C::decodeButtons(bool &btn1, bool &btn2, bool &btn3, bool &btn4) const {
+    btn1 = buttons & 0x01;
+    btn2 = (buttons >> 1) & 0x01;
+    btn3 = (buttons >> 2) & 0x01;
+    btn4 = (buttons >> 3) & 0x01;
 }
 
 void BotConnect_i2C::_parseLine(const char *line) {
