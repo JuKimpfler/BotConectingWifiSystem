@@ -54,7 +54,7 @@ ESP-NOW und STA-WLAN teilen ein Funkmodul. Daher muss ESP-NOW auf dem Kanal des 
 
 ## 4.2 Transportregeln
 - Steuerdaten: kleine UDP-Pakete, hohe Sendefrequenz, optional redundante Wiederholung.
-- Debugdaten: große aggregierte UDP-Pakete, Burst-fähig, dropbar.
+- Debugdaten: kleine UDP-Pakete aus jedem eingehenden Teensy-Debugframe, sofort senden, bei Last weiterhin dropbar.
 
 ---
 

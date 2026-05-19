@@ -32,9 +32,9 @@ Schrittweise, risikoarme Umsetzung der V3.0-Architektur mit klaren Abnahmekriter
 
 ---
 
-## Phase 3 – UDP Control + Debug Aggregation
+## Phase 3 – UDP Control + Echtzeit-Debug-Streaming
 - UDP-Control RX implementieren
-- UDP-Debug TX mit ~1400-Byte Aggregation einführen
+- UDP-Debug TX als sofortige 1:1-Weiterleitung der Teensy-Pakete einführen
 - Heartbeat mit Statusfeldern zum PC senden
 
 **Done-Kriterium:** Steuerung stabil, Debug-Durchsatz signifikant erhöht.
