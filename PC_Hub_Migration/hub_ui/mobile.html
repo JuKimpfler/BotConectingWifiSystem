@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BCWS Mobile Control</title>
+  <link rel="stylesheet" href="/mobile.css" />
+</head>
+<body>
+  <main class="mobile-shell">
+    <header class="header">
+      <div>
+        <div class="logo">BCWS MOBILE</div>
+        <div id="target-info" class="subline">Target: SAT1</div>
+      </div>
+      <div id="status" class="badge offline">WS</div>
+    </header>
+
+    <section class="panel control-panel">
+      <h1>Joystick</h1>
+      <div class="joystick-wrapper">
+        <canvas id="joystick" width="260" height="260"></canvas>
+      </div>
+      <div class="telemetry-row">
+        <div><span>Speed</span><strong id="speed-value">0</strong></div>
+        <div><span>Angle</span><strong id="angle-value">0</strong></div>
+      </div>
+      <button id="start-btn" class="start-btn">START AUS</button>
+    </section>
+  </main>
+  <script src="/mobile.js"></script>
+</body>
+</html>

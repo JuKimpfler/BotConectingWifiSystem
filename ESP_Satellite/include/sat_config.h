@@ -42,6 +42,22 @@
 #define I2C_LINE_BUF_SIZE    128
 #define I2C_QUEUE_SIZE       8
 
+// ── WiFi / UDP hub link (PC hotspot) ──────────────────────────
+#define WIFI_HOTSPOT_SSID      "BCWS-PC-Hub"
+#define WIFI_HOTSPOT_PASS      "hub12345"
+#define WIFI_HOTSPOT_CHANNEL   DEFAULT_CHANNEL
+#define HUB_HOST_IP            "192.168.137.1"
+#define HUB_UDP_PORT           5005
+#define SAT_UDP_LOCAL_PORT     5006
+#define WIFI_RECONNECT_INTERVAL_MS 5000
+
+// ── FreeRTOS task priorities ──────────────────────────────────
+#define TASK_PRIO_ESPNOW       5
+#define TASK_PRIO_UDP_CMD      4
+#define TASK_PRIO_UDP_TELEM    2
+#define P2P_QUEUE_LENGTH       16
+#define TELEMETRY_QUEUE_LENGTH 32
+
 // ── DBG prefix for Teensy communication ──────────────────────
 // Prefixes are defined in shared/messages.h (DBG_PREFIX_SAT1/SAT2)
 
