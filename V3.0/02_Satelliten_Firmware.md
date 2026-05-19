@@ -18,7 +18,7 @@ Firmware-Design mit harter Priorisierung:
 - `taskHousekeeping` (Prio 1)
 
 ## 2.2 Regeln
-- `taskEspNowRxTx` darf nicht durch große memcpy-/String-Operationen blockiert werden.
+- `taskEspNowRxTx` darf nicht durch lange Kopier-/String-Operationen blockiert werden (Richtwert: keine Einzeloperation > 1 ms im kritischen Pfad).
 - `taskUdpDebugTx` muss regelmäßig `vTaskDelay(1)`/yield nutzen.
 - Für jede Queue High-/Low-Watermark-Monitoring vorsehen.
 
@@ -75,4 +75,3 @@ Viele kleine Pakete erzeugen hohen Overhead. Aggregation erhöht Netto-Durchsatz
 3. UDP-Control-RX integrieren.
 4. UDP-Debug-Aggregation aktivieren.
 5. Telemetrie/Counter für Diagnose ergänzen.
-

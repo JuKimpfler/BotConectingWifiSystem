@@ -15,7 +15,7 @@ Hub wird von ESP auf **Windows-PC als Standalone-Hub** verlagert.
 
 | Priorität | Datenfluss | Transport | Max. Latenz-Ziel | Verlusttoleranz | Bemerkung |
 |---|---|---|---|---|---|
-| P1 | SAT1 ↔ SAT2 | ESP-NOW | so gering wie möglich (Best Effort im selben Kanal, Ziel < 10 ms) | niedrig | Muss stets Vorrang vor allen anderen Tasks haben |
+| P1 | SAT1 ↔ SAT2 | ESP-NOW | Zielwert: < 10 ms (Best Effort, messtechnisch überwachen) | niedrig | Muss stets Vorrang vor allen anderen Tasks haben |
 | P2 | PC → SAT (Steuerung) | UDP Unicast | niedrig (Ziel < 20 ms Ende-zu-Ende) | mittel-niedrig | Sequenznummer + optionales ACK/Heartbeat |
 | P3 | SAT → PC (Debug) | UDP Unicast/Burst | unkritisch | hoch | Aggregation (~1400 Byte Payload), ggf. Drop bei Last |
 
