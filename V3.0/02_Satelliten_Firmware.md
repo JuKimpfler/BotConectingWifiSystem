@@ -52,11 +52,11 @@ Die Debugdaten vom Teensy liegen pro eingehendem Paket nur bei ca. **150 Bytes**
 1. UART/Diagnosepfad empfängt ein vollständiges Debugpaket vom Teensy.
 2. Paket wird direkt in eine UDP-Sendenachricht überführt (inkl. `sat_id`, `seq`, `timestamp`, `flags`).
 3. `taskUdpDebugTx` sendet das Paket ohne zusätzlichen 1400-Byte-Sammelbuffer sofort an den PC.
-4. Bei Sendefehler: Zähler erhöhen, kein blockierendes Nachaggregieren; Debugdaten dürfen bei Last verworfen werden.
+4. Bei Sendefehler: Zähler erhöhen, kein blockierendes erneutes Senden; Debugdaten dürfen bei Last verworfen werden.
 5. FreeRTOS-Prioritäten bleiben unverändert: `taskEspNowRxTx` behält Vorrang vor `taskUdpDebugTx`, damit die SAT-SAT-Kommunikation geschützt bleibt.
 
 ## 4.4 Begründung der Netzlast
-- Selbst bei zwei Satelliten liegt die reine Debuglast nur bei wenigen Kilobyte pro Sekunde und bleibt damit weit unter einer kritischen WLAN-Auslastung.
+- Selbst bei zwei Satelliten liegt die reine Debuglast nur bei ca. **10 KB/s** und bleibt damit weit unter einer kritischen WLAN-Auslastung.
 - Der Verzicht auf Aggregation vermeidet zusätzliches Warten im Satelliten und verbessert die Sichtbarkeit im PC-Plotter.
 - Der Echtzeitvorteil ist wichtiger als die kleine Protokollersparnis durch größere UDP-Blöcke.
 
