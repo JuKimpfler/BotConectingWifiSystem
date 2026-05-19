@@ -5,7 +5,7 @@ V3.0 trennt strikt zwischen **Echtzeit-Steuerpfad** und **Bulk-Datenpfad**:
 
 - **Prio 1 (kritisch):** SAT1 ↔ SAT2 direkt via ESP-NOW (unverändert, höchste Priorität)
 - **Prio 2 (hoch):** PC-Hub ↔ SAT Steuerbefehle via UDP im WLAN (Windows-Hotspot)
-- **Prio 3 (niedrig):** SAT → PC Debug-/Telemetriedaten via UDP (große Datenmengen, aggregiert)
+- **Prio 3 (niedrig):** SAT → PC Debug-/Telemetriedaten via UDP als Echtzeit-Streaming einzelner Pakete
 
 Hub wird von ESP auf **Windows-PC als Standalone-Hub** verlagert.
 
@@ -17,7 +17,7 @@ Hub wird von ESP auf **Windows-PC als Standalone-Hub** verlagert.
 |---|---|---|---|---|---|
 | P1 | SAT1 ↔ SAT2 | ESP-NOW | Zielwert: < 10 ms (Best Effort, messtechnisch überwachen) | niedrig | Muss stets Vorrang vor allen anderen Tasks haben |
 | P2 | PC → SAT (Steuerung) | UDP Unicast | niedrig (Ziel < 20 ms Ende-zu-Ende) | mittel-niedrig | Sequenznummer + optionales ACK/Heartbeat |
-| P3 | SAT → PC (Debug) | UDP Unicast/Burst | unkritisch | hoch | Aggregation (~1400 Byte Payload), ggf. Drop bei Last |
+| P3 | SAT → PC (Debug) | UDP Unicast | Zielwert: < 5 ms SAT → PC | hoch | Jedes Teensy-Debugpaket (~150 Byte) sofort senden; ESP-NOW/Control behalten Vorrang |
 
 ---
 
@@ -53,6 +53,6 @@ Hub wird von ESP auf **Windows-PC als Standalone-Hub** verlagert.
 
 Die V3.0-Architektur ermöglicht:
 - prioritätsgerechte Kommunikation,
-- deutlich höhere Debug-Datenrate durch UDP-Aggregation,
+- echtzeitnahe Debugdarstellung durch sofortiges UDP-Streaming bei geringer WLAN-Last,
 - bessere Wartbarkeit durch PC-zentrierten Hub,
 - mobile Steuerung (Joystick) über minimale Web UI im gleichen Netzwerk.
