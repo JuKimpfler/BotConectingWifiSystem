@@ -156,8 +156,9 @@ else {
 Write-Step "Creating Windows launchers..."
 @"
 @echo off
-cd /d "$RepoRoot"
-"$PythonVenv" -m PC_Hub_Migration.hub_core.main --config "$ConfigFile" --log-level INFO
+set SCRIPT_DIR=%~dp0
+cd /d "%SCRIPT_DIR%.."
+"%SCRIPT_DIR%.venv\Scripts\python.exe" -m PC_Hub_Migration.hub_core.main --config "%SCRIPT_DIR%config\hub_config.yaml" --log-level INFO
 "@ | Set-Content -Path $StartScript -Encoding ASCII
 Write-Ok "Created launcher: $StartScript"
 

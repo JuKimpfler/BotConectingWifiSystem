@@ -67,6 +67,7 @@ static volatile uint8_t s_i2cTxHead = 0;
 static volatile uint8_t s_i2cTxCount = 0;
 static portMUX_TYPE s_i2cQueueMux = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE s_i2cPendingMux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE s_routeQueueMux = portMUX_INITIALIZER_UNLOCKED;
 static UdpHubLink g_udpHubLink;
 static QueueHandle_t g_p2pQueue = nullptr;
 static QueueHandle_t g_telemQueue = nullptr;
@@ -212,8 +213,11 @@ static bool enqueueRoutedLine(QueueHandle_t queue, const char *line, const char 
 
     if (queue == g_telemQueue) {
         RoutedLine dropped = {};
+        portENTER_CRITICAL(&s_routeQueueMux);
         xQueueReceive(queue, &dropped, 0);
-        return xQueueSend(queue, &item, 0) == pdTRUE;
+        bool ok = (xQueueSend(queue, &item, 0) == pdTRUE);
+        portEXIT_CRITICAL(&s_routeQueueMux);
+        return ok;
     }
     return false;
 }
@@ -783,8 +787,8 @@ void setup() {
                   SAT_ID, WiFi.macAddress().c_str(), g_channel);
     USB_DEBUG_PRINTF("[SAT%d] Type 'help' for USB commands\n", SAT_ID);
     USB_DEBUG_PRINTF("[SAT%d] Monitor mode default: %s\n", SAT_ID, monitorModeName(g_monitorMode));
-    USB_DEBUG_PRINTF("[SAT%d] WiFi target SSID: %s  hub=%s:%u\n",
-                  SAT_ID, WIFI_HOTSPOT_SSID, HUB_HOST_IP, HUB_UDP_PORT);
+    USB_DEBUG_PRINTF("[SAT%d] WiFi target SSID configured (len=%u) hub=%s:%u\n",
+                  SAT_ID, (unsigned)(sizeof(WIFI_HOTSPOT_SSID) - 1), HUB_HOST_IP, HUB_UDP_PORT);
 }
 
 // ─── Loop ─────────────────────────────────────────────────────
