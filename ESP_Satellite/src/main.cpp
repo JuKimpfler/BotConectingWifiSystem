@@ -8,12 +8,14 @@
 #include <ctype.h>
 #include <Preferences.h>
 #include <Wire.h>
+#include <freertos/semphr.h>
 #include "sat_config.h"
 #include "messages.h"
 #include "crc16.h"
 #include "EspNowBridge.h"
 #include "AckManager.h"
 #include "CommandParser.h"
+#include "UdpHubLink.h"
 
 // ─── MAC addresses (loaded from NVS or set via Serial config) ─
 // NOTE: g_hubMac / g_peerMac are written from the ESP-NOW callback (WiFi task)
@@ -56,7 +58,6 @@ static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static uint32_t g_lastP2pLedBlink = 0;
 static uint32_t g_lastP2pDataFlow = 0;
 static bool     g_p2pLedBlinkState = false;
-#define SAT_TELEM_MAX_STREAMS 32
 static char s_i2cRxLine[I2C_LINE_BUF_SIZE];
 static uint8_t s_i2cRxIdx = 0;
 static bool s_i2cRxOverflow = false;
@@ -67,114 +68,18 @@ static volatile uint8_t s_i2cTxHead = 0;
 static volatile uint8_t s_i2cTxCount = 0;
 static portMUX_TYPE s_i2cQueueMux = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE s_i2cPendingMux = portMUX_INITIALIZER_UNLOCKED;
+static SemaphoreHandle_t s_routeQueueMutex = nullptr;
+static UdpHubLink g_udpHubLink;
+static QueueHandle_t g_p2pQueue = nullptr;
+static QueueHandle_t g_telemQueue = nullptr;
 
-struct TelemetryStreamMapEntry {
-    char    name[TELEM_NAME_MAX_LEN];
-    uint8_t id;
-    bool    used;
-    bool    announced;
+struct RoutedLine {
+    char line[UART_RX_BUF_SIZE];
+    char srcLabel[8];
 };
-
-static TelemetryStreamMapEntry g_telemStreamMap[SAT_TELEM_MAX_STREAMS] = {};
-static uint8_t g_telemStreamCount = 0;
-static TelemetryCompactValue_t g_telemQueue[TELEM_BATCH_MAX_VALUES] = {};
-static uint8_t g_telemQueueLen = 0;
-static uint32_t g_lastTelemFlush = 0;
 
 static void markP2pDataFlow() {
     g_lastP2pDataFlow = millis();
-}
-
-static int findTelemetryStreamByName(const char *name) {
-    if (!name || name[0] == '\0') return -1;
-    for (int i = 0; i < g_telemStreamCount; i++) {
-        if (g_telemStreamMap[i].used &&
-            strncmp(g_telemStreamMap[i].name, name, sizeof(g_telemStreamMap[i].name)) == 0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-static int ensureTelemetryStream(const char *name) {
-    int idx = findTelemetryStreamByName(name);
-    if (idx >= 0) return idx;
-    if (g_telemStreamCount >= SAT_TELEM_MAX_STREAMS) return -1;
-    idx = g_telemStreamCount++;
-    memset(&g_telemStreamMap[idx], 0, sizeof(g_telemStreamMap[idx]));
-    g_telemStreamMap[idx].used = true;
-    g_telemStreamMap[idx].id   = (uint8_t)idx;
-    strlcpy(g_telemStreamMap[idx].name, name, sizeof(g_telemStreamMap[idx].name));
-    return idx;
-}
-
-static bool sendTelemetryDict(uint8_t streamId) {
-    if (!g_hubKnown) return false;
-    if (streamId >= g_telemStreamCount) return false;
-    TelemetryStreamMapEntry *entry = &g_telemStreamMap[streamId];
-    if (!entry->used || entry->announced) return true;
-
-    TelemetryDictPayload_t dict = {};
-    dict.stream_id = streamId;
-    strlcpy(dict.name, entry->name, sizeof(dict.name));
-
-    Frame_t frame = {};
-    frame.magic      = FRAME_MAGIC;
-    frame.msg_type   = MSG_TELEM_DICT;
-    frame.seq        = g_seq++;
-    frame.src_role   = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
-    frame.dst_role   = ROLE_HUB;
-    frame.flags      = 0;
-    frame.network_id = ESPNOW_NETWORK_ID;
-    frame.len        = sizeof(dict);
-    memcpy(frame.payload, &dict, sizeof(dict));
-
-    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
-    memcpy(frame.payload + frame.len, &crc, 2);
-
-    bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
-    if (ok) entry->announced = true;
-    return ok;
-}
-
-static uint32_t telemetryFlushIntervalMs(uint8_t pendingValues) {
-    // Keep latency very low for sparse telemetry (small queue), but when many
-    // values are pending we wait a bit longer to increase packing efficiency.
-    // This balances "max update rate at low load" with better airtime usage.
-    // Return value unit: milliseconds.
-    if (pendingValues <= 1) return 6;   // very low load -> highest update rate
-    if (pendingValues <= 3) return 10;
-    if (pendingValues <= 6) return 16;
-    if (pendingValues <= 10) return 24;
-    return 32;
-}
-
-static bool flushTelemetryQueue(bool force) {
-    if (!g_hubKnown || g_telemQueueLen == 0) return false;
-    uint32_t now = millis();
-    uint32_t minInterval = telemetryFlushIntervalMs(g_telemQueueLen);
-    if (!force && (uint32_t)(now - g_lastTelemFlush) < minInterval) return false;
-
-    Frame_t frame = {};
-    frame.magic      = FRAME_MAGIC;
-    frame.msg_type   = MSG_TELEM_BATCH;
-    frame.seq        = g_seq++;
-    frame.src_role   = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
-    frame.dst_role   = ROLE_HUB;
-    frame.flags      = 0;
-    frame.network_id = ESPNOW_NETWORK_ID;
-    frame.len        = g_telemQueueLen * sizeof(TelemetryCompactValue_t);
-    memcpy(frame.payload, g_telemQueue, frame.len);
-
-    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + frame.len);
-    memcpy(frame.payload + frame.len, &crc, 2);
-
-    bool ok = EspNowBridge::instance().send(g_hubMac, &frame);
-    if (ok) {
-        g_telemQueueLen = 0;
-        g_lastTelemFlush = now;
-    }
-    return ok;
 }
 
 // ─── USB serial command handler ──────────────────────────────
@@ -300,47 +205,66 @@ static void sendPeerDiscovery() {
     }
 }
 
+static bool enqueueRoutedLine(QueueHandle_t queue, const char *line, const char *srcLabel) {
+    if (!queue || !line || line[0] == '\0') return false;
+    RoutedLine item = {};
+    strlcpy(item.line, line, sizeof(item.line));
+    strlcpy(item.srcLabel, srcLabel ? srcLabel : "SRC", sizeof(item.srcLabel));
+
+    if (queue == g_telemQueue) {
+        if (!s_routeQueueMutex || xSemaphoreTake(s_routeQueueMutex, 0) != pdTRUE) {
+            return false;
+        }
+        BaseType_t ok = xQueueSend(queue, &item, 0);
+        if (ok != pdTRUE) {
+            RoutedLine dropped = {};
+            xQueueReceive(queue, &dropped, 0);
+            ok = xQueueSend(queue, &item, 0);
+        }
+        xSemaphoreGive(s_routeQueueMutex);
+        return ok == pdTRUE;
+    }
+    return xQueueSend(queue, &item, 0) == pdTRUE;
+}
+
+static bool sendHubUdpFrame(uint8_t msgType, const uint8_t *payload, uint8_t payLen, uint8_t flags = 0) {
+    Frame_t frame = {};
+    frame.magic      = FRAME_MAGIC;
+    frame.msg_type   = msgType;
+    frame.seq        = g_seq++;
+    frame.src_role   = (SAT_ID == 1) ? ROLE_SAT1 : ROLE_SAT2;
+    frame.dst_role   = ROLE_HUB;
+    frame.flags      = flags;
+    frame.network_id = ESPNOW_NETWORK_ID;
+    frame.len        = payLen;
+    if (payLen > 0 && payload) {
+        memcpy(frame.payload, payload, payLen);
+    }
+    uint16_t crc = crc16_buf((const uint8_t *)&frame, FRAME_HEADER_SIZE + payLen);
+    memcpy(frame.payload + payLen, &crc, 2);
+    return g_udpHubLink.sendFrame(&frame);
+}
+
 static bool forwardTelemetryLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel) return false;
     TelemetryEntry_t telem = {};
     if (!parser.uartLineToEntry(line, &telem)) return false;
 
-    if (!g_hubKnown) {
+    if (!g_udpHubLink.isWifiConnected()) {
         if (g_monitorMode == MONITOR_BRIDGE || g_monitorMode == MONITOR_STATUS) {
             USB_DEBUG_PRINTF("[SAT%d] %s DBG '", SAT_ID, srcLabel);
             USB_DEBUG_PRINT(line);
-            USB_DEBUG_PRINTLN("' – hub unknown, dropped");
+            USB_DEBUG_PRINTLN("' – WiFi/UDP unavailable, dropped");
         }
         return true;
     }
-
-    int streamIdx = ensureTelemetryStream(telem.name);
-    if (streamIdx < 0) return true;
-    if (!sendTelemetryDict((uint8_t)streamIdx)) return true;
-
-    if (g_telemQueueLen >= TELEM_BATCH_MAX_VALUES) {
-        flushTelemetryQueue(true);
-        if (g_telemQueueLen >= TELEM_BATCH_MAX_VALUES) return true;
-    }
-    TelemetryCompactValue_t &v = g_telemQueue[g_telemQueueLen];
-    v.stream_id = (uint8_t)streamIdx;
-    v.vtype = telem.vtype;
-    if (telem.vtype == 0) {
-        v.raw = telem.value.i32;
-    } else if (telem.vtype == 1) {
-        memcpy(&v.raw, &telem.value.f32, sizeof(v.raw));
-    } else {
-        v.raw = telem.value.b ? 1 : 0;
-    }
-    g_telemQueueLen++;
-    bool sent = flushTelemetryQueue(false);
+    bool sent = sendHubUdpFrame(MSG_DBG, (const uint8_t *)&telem, sizeof(telem));
 
     if (g_monitorMode == MONITOR_BRIDGE) {
         USB_DEBUG_PRINTF("[SAT%d] %s DBG '", SAT_ID, srcLabel);
         USB_DEBUG_PRINT(line);
-        USB_DEBUG_PRINTF("' -> compact queue=%u sent=%s\n", g_telemQueueLen, sent ? "yes" : "no");
+        USB_DEBUG_PRINTF("' -> UDP realtime sent=%s\n", sent ? "yes" : "no");
     }
-    // DBG lines are NOT forwarded to peer satellite – they are hub-only telemetry
     return true;
 }
 
@@ -389,9 +313,30 @@ static bool forwardUartRawToPeer(const String &str) {
 static bool routePayloadLine(const char *line, const char *srcLabel) {
     if (!line || !srcLabel || line[0] == '\0') return false;
     if (strncmp(line, DBG_PREFIX, strlen(DBG_PREFIX)) == 0) {
-        return forwardTelemetryLine(line, srcLabel);
+        return enqueueRoutedLine(g_telemQueue, line, srcLabel);
     }
-    return forwardUartRawToPeer(line);
+    return enqueueRoutedLine(g_p2pQueue, line, srcLabel);
+}
+
+static void p2pSendTask(void *unused) {
+    (void)unused;
+    RoutedLine item = {};
+    for (;;) {
+        if (xQueueReceive(g_p2pQueue, &item, portMAX_DELAY) == pdTRUE) {
+            forwardUartRawToPeer(item.line);
+        }
+    }
+}
+
+static void udpTelemetryTask(void *unused) {
+    (void)unused;
+    RoutedLine item = {};
+    for (;;) {
+        if (xQueueReceive(g_telemQueue, &item, portMAX_DELAY) == pdTRUE) {
+            forwardTelemetryLine(item.line, item.srcLabel);
+            vTaskDelay(1);
+        }
+    }
 }
 
 static void enqueueI2cTxLine(const char *line) {
@@ -499,6 +444,9 @@ static void handleSerialCmd(const char *cmd) {
             USB_DEBUG_PRINTF("[SAT%d] Peer MAC: unknown\n", SAT_ID);
         }
         USB_DEBUG_PRINTF("[SAT%d] Hub online: %s\n", SAT_ID, g_hubOnline ? "yes" : "no");
+        USB_DEBUG_PRINTF("[SAT%d] WiFi STA  : %s (%s)\n", SAT_ID,
+                      WiFi.localIP().toString().c_str(),
+                      g_udpHubLink.isWifiConnected() ? "connected" : "offline");
     } else if (equalsIgnoreCase(cmd, "debug")) {
         USB_DEBUG_PRINTF("[SAT%d] === Debug Status ===\n", SAT_ID);
         USB_DEBUG_PRINTF("[SAT%d] Uptime    : %lu ms\n", SAT_ID, (unsigned long)millis());
@@ -507,6 +455,9 @@ static void handleSerialCmd(const char *cmd) {
         USB_DEBUG_PRINTF("[SAT%d] Hub       : %s (%s)\n", SAT_ID,
                       g_hubKnown  ? "known"   : "unknown",
                       g_hubOnline ? "online"  : "offline");
+        USB_DEBUG_PRINTF("[SAT%d] WiFi STA  : %s (%s)\n", SAT_ID,
+                      WiFi.localIP().toString().c_str(),
+                      g_udpHubLink.isWifiConnected() ? "connected" : "offline");
         USB_DEBUG_PRINTF("[SAT%d] Peer      : %s\n", SAT_ID,
                       g_peerKnown ? "known"   : "unknown");
         USB_DEBUG_PRINTF("[SAT%d] ACK queue : %u pending\n", SAT_ID, ackMgr.pendingCount());
@@ -583,6 +534,43 @@ static bool sendFrame(const uint8_t *mac, uint8_t msgType,
     return ok;
 }
 
+static void forwardHubFrameToTeensy(const Frame_t *frame) {
+    char uartBuf[128];
+    int n = parser.hubFrameToUart(frame, uartBuf, sizeof(uartBuf));
+    if (n > 0) {
+        enqueueI2cTxLine(uartBuf);
+#ifdef UART_BRIDGE_USB
+        Serial.print(uartBuf);
+#else
+        TeensySerial.print(uartBuf);
+        Serial.print(uartBuf);
+#endif
+    } else {
+        USB_DEBUG_PRINTF("[SAT%d] cmd type=0x%02X seq=%u – UART encode failed\n",
+                      SAT_ID, frame->msg_type, frame->seq);
+    }
+}
+
+static void maybeAckHubCommand(const Frame_t *frame, bool viaUdp) {
+    if (!(frame->flags & FLAG_ACK_REQ)) return;
+    AckPayload_t ack = {};
+    ack.ack_seq  = frame->seq;
+    ack.status   = ACK_OK;
+    ack.msg_type = frame->msg_type;
+    bool ok = viaUdp
+        ? sendHubUdpFrame(MSG_ACK, (const uint8_t *)&ack, sizeof(ack))
+        : (g_hubKnown && sendFrame(g_hubMac, MSG_ACK, (const uint8_t *)&ack, sizeof(ack)));
+    if (g_monitorMode == MONITOR_BRIDGE) {
+        USB_DEBUG_PRINTF("[SAT%d] ACK seq=%u sent=%s via=%s\n",
+                      SAT_ID, frame->seq, ok ? "ok" : "fail", viaUdp ? "udp" : "esp-now");
+    }
+}
+
+static void processHubCommandFrame(const Frame_t *frame, bool viaUdp) {
+    forwardHubFrameToTeensy(frame);
+    maybeAckHubCommand(frame, viaUdp);
+}
+
 // ─── ESP-NOW receive callback ─────────────────────────────────
 static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     learnPeerMac(mac, frame->src_role);
@@ -626,34 +614,7 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     case MSG_CTRL:
     case MSG_MODE:
     case MSG_CAL: {
-        // Forward to Teensy via UART (or USB when UART_BRIDGE_USB is active)
-        char uartBuf[128];
-        int n = parser.hubFrameToUart(frame, uartBuf, sizeof(uartBuf));
-        if (n > 0) {
-            enqueueI2cTxLine(uartBuf);
-#ifdef UART_BRIDGE_USB
-            // USB-only mode: route command output directly via USB (no debug prefix)
-            Serial.print(uartBuf);
-#else
-            TeensySerial.print(uartBuf);
-            // Standard mode: show UART TX traffic on USB monitor as well
-            Serial.print(uartBuf);
-#endif
-        } else {
-            USB_DEBUG_PRINTF("[SAT%d] cmd type=0x%02X seq=%u – UART encode failed\n",
-                          SAT_ID, frame->msg_type, frame->seq);
-        }
-        // Send ACK to hub if requested
-        if ((frame->flags & FLAG_ACK_REQ) && g_hubKnown) {
-            AckPayload_t ack;
-            ack.ack_seq  = frame->seq;
-            ack.status   = ACK_OK;
-            ack.msg_type = frame->msg_type;
-            bool ok = sendFrame(g_hubMac, MSG_ACK, (const uint8_t *)&ack, sizeof(ack));
-            if (g_monitorMode == MONITOR_BRIDGE) {
-                USB_DEBUG_PRINTF("[SAT%d] ACK seq=%u sent=%s\n", SAT_ID, frame->seq, ok ? "ok" : "fail");
-            }
-        }
+        processHubCommandFrame(frame, false);
         break;
     }
 
@@ -670,11 +631,11 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     case MSG_DBG:
     case MSG_TELEM_DICT:
     case MSG_TELEM_BATCH:
-        // Telemetry from peer satellite – forward to hub if available
-        if (g_hubKnown) {
-            EspNowBridge::instance().send(g_hubMac, frame);
+        // If peer telemetry still arrives over ESP-NOW, relay it to the PC hub via UDP.
+        if (g_udpHubLink.isWifiConnected()) {
+            g_udpHubLink.sendFrame(frame);
             if (g_monitorMode == MONITOR_BRIDGE) {
-                USB_DEBUG_PRINTF("[SAT%d] Peer DBG frame forwarded to hub\n", SAT_ID);
+                USB_DEBUG_PRINTF("[SAT%d] Peer telemetry relayed via UDP\n", SAT_ID);
             }
         }
         break;
@@ -763,6 +724,31 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
     }
 }
 
+static void udpCommandTask(void *unused) {
+    (void)unused;
+    Frame_t frame = {};
+    for (;;) {
+        if (g_udpHubLink.readFrame(&frame)) {
+            if (frame.src_role != ROLE_HUB) {
+                vTaskDelay(1);
+                continue;
+            }
+            if (frame.msg_type == MSG_HEARTBEAT) {
+                bool wasOnline = g_hubOnline;
+                g_lastHubHeartbeat = millis();
+                g_hubOnline = true;
+                if (!wasOnline && g_monitorMode == MONITOR_STATUS) {
+                    USB_DEBUG_PRINTF("[SAT%d] Hub back online (UDP)\n", SAT_ID);
+                }
+            } else if (frame.msg_type == MSG_CTRL || frame.msg_type == MSG_MODE || frame.msg_type == MSG_CAL) {
+                processHubCommandFrame(&frame, true);
+            }
+        }
+        g_udpHubLink.tick();
+        vTaskDelay(1);
+    }
+}
+
 // ─── Setup ────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
@@ -789,17 +775,26 @@ void setup() {
     EspNowBridge &bridge = EspNowBridge::instance();
     bridge.begin(g_channel);
     bridge.setRecvCallback(onFrame);
+    g_udpHubLink.begin();
 
     // Register known peers
     if (g_hubKnown)  bridge.addPeer(g_hubMac);
     if (g_peerKnown) bridge.addPeer(g_peerMac);
 
     ackMgr.begin();
+    g_p2pQueue = xQueueCreate(P2P_QUEUE_LENGTH, sizeof(RoutedLine));
+    g_telemQueue = xQueueCreate(TELEMETRY_QUEUE_LENGTH, sizeof(RoutedLine));
+    s_routeQueueMutex = xSemaphoreCreateMutex();
+    xTaskCreate(p2pSendTask, "p2pSend", 4096, nullptr, TASK_PRIO_ESPNOW, nullptr);
+    xTaskCreate(udpCommandTask, "udpCmd", 4096, nullptr, TASK_PRIO_UDP_CMD, nullptr);
+    xTaskCreate(udpTelemetryTask, "udpTelem", 4096, nullptr, TASK_PRIO_UDP_TELEM, nullptr);
 
     USB_DEBUG_PRINTF("[SAT%d] Ready – MAC: %s  ch=%u\n",
                   SAT_ID, WiFi.macAddress().c_str(), g_channel);
     USB_DEBUG_PRINTF("[SAT%d] Type 'help' for USB commands\n", SAT_ID);
     USB_DEBUG_PRINTF("[SAT%d] Monitor mode default: %s\n", SAT_ID, monitorModeName(g_monitorMode));
+    USB_DEBUG_PRINTF("[SAT%d] WiFi target SSID configured (len=%u) hub=%s:%u\n",
+                  SAT_ID, (unsigned)(sizeof(WIFI_HOTSPOT_SSID) - 1), HUB_HOST_IP, HUB_UDP_PORT);
 }
 
 // ─── Loop ─────────────────────────────────────────────────────
@@ -853,18 +848,19 @@ void loop() {
     // When UART_BRIDGE_USB is defined, Teensy telemetry input is handled via
     // the USB serial command handler below (type DBG<ID>:<name>=<value>).
 
-    // ── Heartbeat to hub ──────────────────────────────────────
-    if (g_hubKnown && (now - g_lastHbSent) >= HEARTBEAT_INTERVAL_MS) {
+    // ── Heartbeat to PC hub (UDP) ─────────────────────────────
+    if ((now - g_lastHbSent) >= HEARTBEAT_INTERVAL_MS) {
         g_lastHbSent = now;
         HeartbeatPayload_t hb;
         hb.uptime_ms = now;
         hb.rssi      = 0;
-        hb.queue_len = 0;
-        sendFrame(g_hubMac, MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
+        UBaseType_t queued = g_telemQueue ? uxQueueMessagesWaiting(g_telemQueue) : 0;
+        hb.queue_len = (queued > 255) ? 255 : (uint8_t)queued;
+        sendHubUdpFrame(MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
     }
 
     // ── Hub online/offline detection ──────────────────────────
-    if (g_hubOnline && g_hubKnown &&
+    if (g_hubOnline &&
         (now - g_lastHubHeartbeat) > HEARTBEAT_TIMEOUT_MS) {
         g_hubOnline = false;
         if (g_monitorMode == MONITOR_STATUS) {
@@ -885,11 +881,9 @@ void loop() {
         return EspNowBridge::instance().send(mac, frame);
     });
 
-    // ── Telemetry flush tick (adaptive based on queued values) ─
-    flushTelemetryQueue(false);
-
     // ── Peer recovery tick (re-register peers after fail-streak) ─
     EspNowBridge::instance().tick();
+    g_udpHubLink.tick();
 
     // ── USB serial command handler ────────────────────────────
     while (Serial.available()) {
@@ -919,7 +913,7 @@ void loop() {
                       SAT_ID, (unsigned long)now,
                       WiFi.macAddress().c_str(),
                       g_channel,
-                      g_hubKnown  ? (g_hubOnline ? "online" : "offline") : "unknown",
+                      g_hubOnline ? "online" : "offline",
                       g_peerKnown ? "known" : "unknown");
     }
 }

@@ -1,5 +1,9 @@
 # BCWS Hub Migration Summary — ESP32-C3 → Windows PC
 
+> **Hinweis (V3.0):** Diese Datei beschreibt die frühere USB-Bridge-Migration.  
+> Die aktuelle V3.0-Implementierung nutzt direkten **UDP**-Verkehr zwischen PC-Hub und Satelliten
+> (siehe `PC_Hub_Migration/hub_core/` und `PC_Hub_Migration/tools/setup.ps1`).
+
 > **Version:** 1.0  
 > **Date:** 2026-04  
 > **Scope:** Hub-only migration. Satellite firmware and Teensy libraries are unchanged.  
