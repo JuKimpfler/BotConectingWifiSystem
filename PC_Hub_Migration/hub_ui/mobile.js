@@ -103,6 +103,14 @@
     ws.addEventListener('close', () => {
       statusBadge.textContent = 'WS'
       statusBadge.className = 'badge offline'
+      if (sendTimer) {
+        clearInterval(sendTimer)
+        sendTimer = null
+      }
+      startActive = false
+      startBtn.classList.remove('active')
+      startBtn.textContent = 'START AUS'
+      resetStick()
       window.setTimeout(connect, 1500)
     })
   }

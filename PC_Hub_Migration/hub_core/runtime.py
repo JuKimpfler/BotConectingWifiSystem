@@ -17,6 +17,7 @@ from .protocol import (
     MSG_DBG,
     MSG_HEARTBEAT,
     MSG_MODE,
+    MSG_ACK,
     ROLE_HUB,
     ROLE_SAT1,
     ROLE_SAT2,
@@ -27,6 +28,7 @@ from .protocol import (
     build_heartbeat_payload,
     build_mode_payload,
     parse_heartbeat,
+    parse_ack,
     parse_telemetry_entry,
 )
 from .state import HubState
@@ -110,6 +112,19 @@ class HubRuntime:
             hb = parse_heartbeat(frame.payload)
             event = self.state.update_heartbeat(role, addr[0], addr[1], hb)
             self._publish_nowait(event)
+            return
+
+        if frame.msg_type == MSG_ACK:
+            ack = parse_ack(frame.payload)
+            self.state.update_endpoint(role, addr[0], addr[1])
+            self.state.log_event(f"{role} · ACK seq={ack.ack_seq} status=0x{ack.status:02X} type=0x{ack.msg_type:02X}")
+            self._publish_nowait({
+                "type": "ack",
+                "role": role,
+                "seq": ack.ack_seq,
+                "status": ack.status,
+                "msg_type": ack.msg_type,
+            })
             return
 
         LOG.info("RX %s frame type=0x%02X from %s:%s", role, frame.msg_type, addr[0], addr[1])

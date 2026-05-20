@@ -7,6 +7,7 @@ from PC_Hub_Migration.hub_core.protocol import (
     Frame,
     build_ctrl_payload,
     crc16_ibm,
+    parse_ack,
     parse_telemetry_entry,
 )
 
@@ -35,6 +36,12 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(parsed.name, 'P2PActive')
         self.assertTrue(parsed.value)
         self.assertEqual(parsed.ts_ms, 1234)
+
+    def test_parse_ack(self):
+        ack = parse_ack(bytes([7, 1, 2]))
+        self.assertEqual(ack.ack_seq, 7)
+        self.assertEqual(ack.status, 1)
+        self.assertEqual(ack.msg_type, 2)
 
 
 if __name__ == '__main__':

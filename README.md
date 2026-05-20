@@ -18,6 +18,29 @@ ESP #3 HUB (WiFi AP + UI)
 
 ## Schnellstart
 
+### V3.0 PC-Hub (Windows, UDP + native GUI)
+
+1. **Windows-Hotspot starten**
+   - 2.4 GHz, fester Kanal (z. B. 6)
+   - SSID/Passwort müssen mit `ESP_Satellite/include/sat_config.h` übereinstimmen
+2. **PC-Hub Setup**
+   ```powershell
+   cd PC_Hub_Migration/tools
+   .\Install-Hub.bat
+   ```
+3. **Satelliten flashen (ESP #1 / #2)**
+   ```bash
+   cd ESP_Satellite
+   pio run -e esp_sat1 -t upload
+   pio run -e esp_sat2 -t upload
+   ```
+4. **PC-Hub starten**
+   - `PC_Hub_Migration/Start-Hub.bat` (oder Desktop-Shortcut)
+5. **Mobile UI öffnen**
+   - `http://<PC-IP>:8080/mobile?role=SAT1`
+
+---
+
 1. **Web-UI bauen**
    ```bash
    cd ESP_Hub/ui

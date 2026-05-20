@@ -64,7 +64,7 @@ Frames mit unpassender ID werden verworfen (außer Legacy `0x00`).
 
 ---
 
-## 6. Hub-Firmware
+## 6. Hub-Firmware (Legacy ESP-Hub)
 
 Wesentliche Aufgaben:
 - Start AP (`ESP-Hub` / `hub12345`)
@@ -75,7 +75,14 @@ Wesentliche Aufgaben:
 
 ---
 
-## 7. Satellite-Firmware
+## 7. PC-Hub (V3.0, Windows)
+
+- Implementierung unter `PC_Hub_Migration/`
+- UDP-Server empfängt Telemetrie von SAT1/SAT2
+- Native GUI (Tk) zeigt Debug-Daten und Status
+- Mobile Web UI liefert Joystick + Start-Button via WebSocket
+
+## 8. Satellite-Firmware
 
 Wesentliche Aufgaben:
 - ESP-NOW Kommunikation
@@ -88,7 +95,7 @@ Wesentliche Aufgaben:
 
 ---
 
-## 8. Build-/Test-Kommandos
+## 9. Build-/Test-Kommandos
 
 Unit-Tests:
 ```bash
@@ -108,7 +115,7 @@ npm run build
 
 ---
 
-## 9. Erweiterungshinweise
+## 10. Erweiterungshinweise
 
 - Neue Nachrichtentypen zuerst in `shared/messages.h` definieren
 - Danach Hub und Satellite-Routing ergänzen

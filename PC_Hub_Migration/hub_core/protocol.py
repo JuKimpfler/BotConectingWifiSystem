@@ -118,6 +118,13 @@ class Heartbeat:
     queue_len: int
 
 
+@dataclass(slots=True)
+class Ack:
+    ack_seq: int
+    status: int
+    msg_type: int
+
+
 def crc16_ibm(data: bytes) -> int:
     crc = 0xFFFF
     for byte in data:
@@ -170,6 +177,13 @@ def parse_telemetry_entry(payload: bytes) -> TelemetryValue:
     else:
         value = raw.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
     return TelemetryValue(name=name, vtype=vtype, value=value, ts_ms=ts_ms)
+
+
+def parse_ack(payload: bytes) -> Ack:
+    if len(payload) < 3:
+        raise ProtocolError("ack payload too short")
+    ack_seq, status, msg_type = struct.unpack("<BBB", payload[:3])
+    return Ack(ack_seq=ack_seq, status=status, msg_type=msg_type)
 
 
 def role_name(role: int) -> str:

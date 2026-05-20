@@ -16,7 +16,24 @@
 
 ---
 
-## 2. Weboberfläche bauen
+## 2. V3.0 PC-Hub (Windows)
+
+1. **Windows-Hotspot starten**
+   - 2.4 GHz, fester Kanal (z. B. 6)
+   - SSID/Passwort und Hub-IP müssen zu `ESP_Satellite/include/sat_config.h` passen
+2. **PC-Hub Setup**
+   ```powershell
+   cd PC_Hub_Migration/tools
+   .\Install-Hub.bat
+   ```
+3. **PC-Hub starten**
+   - `PC_Hub_Migration/Start-Hub.bat` (oder Desktop-Shortcut)
+4. **Mobile UI**
+   - `http://<PC-IP>:8080/mobile?role=SAT1`
+
+---
+
+## 3. Weboberfläche bauen (Legacy ESP-Hub)
 
 ```bash
 cd ESP_Hub/ui
@@ -28,7 +45,7 @@ Hinweis: `npm run build` braucht lokale Node-Dependencies (u. a. `vite`).
 
 ---
 
-## 3. Hub flashen (ESP #3)
+## 4. Hub flashen (ESP #3, Legacy)
 
 ### 3a. Hub auf ESP32-C3 (Standard)
 
@@ -54,7 +71,7 @@ Details zu Pin-/ADC-Unterschieden: [Hardware.md](Hardware.md).
 
 ---
 
-## 4. Satelliten flashen (ESP #1/#2)
+## 5. Satelliten flashen (ESP #1/#2)
 
 Satelliten laufen immer auf ESP32-C3 – hier ändert sich nichts:
 
@@ -70,7 +87,7 @@ Optional (USB-Bridge statt HW-UART):
 
 ---
 
-## 5. Teensy anbinden
+## 6. Teensy anbinden
 
 - BotConnect-Library aus `Teensy_lib/` in Arduino-Libraries kopieren
 - Im Sketch:
@@ -82,7 +99,7 @@ Details: [Teensy.md](Teensy.md)
 
 ---
 
-## 6. Erstinbetriebnahme
+## 7. Erstinbetriebnahme (Legacy ESP-Hub)
 
 1. Alle ESPs einschalten
 2. Mit WLAN `ESP-Hub` verbinden (Passwort `hub12345`)
@@ -92,7 +109,7 @@ Details: [Teensy.md](Teensy.md)
 
 ---
 
-## 7. Unit-Tests
+## 8. Unit-Tests
 
 ```bash
 cd test/unit
@@ -106,7 +123,7 @@ Aktuell enthalten: `test_crc16`, `test_messages`, `test_command_parser`, `test_r
 
 ---
 
-## 8. Häufige Probleme
+## 9. Häufige Probleme
 
 - **UI leer/404:** `uploadfs` vergessen
 - **Satelliten offline:** Channel/Pairing prüfen
