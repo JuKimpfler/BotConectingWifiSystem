@@ -97,8 +97,11 @@
     ws.addEventListener('open', () => {
       statusBadge.textContent = 'WS ●'
       statusBadge.className = 'badge online'
+      startActive = false
+      startBtn.classList.remove('active')
+      startBtn.textContent = 'START AUS'
+      resetStick()
       ensureTimer()
-      sendControl()
     })
     ws.addEventListener('close', () => {
       statusBadge.textContent = 'WS'

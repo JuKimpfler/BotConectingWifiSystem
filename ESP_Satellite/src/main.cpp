@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <Preferences.h>
 #include <Wire.h>
+#include <freertos/semphr.h>
 #include "sat_config.h"
 #include "messages.h"
 #include "crc16.h"
@@ -67,7 +68,7 @@ static volatile uint8_t s_i2cTxHead = 0;
 static volatile uint8_t s_i2cTxCount = 0;
 static portMUX_TYPE s_i2cQueueMux = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE s_i2cPendingMux = portMUX_INITIALIZER_UNLOCKED;
-static portMUX_TYPE s_routeQueueMux = portMUX_INITIALIZER_UNLOCKED;
+static SemaphoreHandle_t s_routeQueueMutex = nullptr;
 static UdpHubLink g_udpHubLink;
 static QueueHandle_t g_p2pQueue = nullptr;
 static QueueHandle_t g_telemQueue = nullptr;
@@ -211,14 +212,16 @@ static bool enqueueRoutedLine(QueueHandle_t queue, const char *line, const char 
     strlcpy(item.srcLabel, srcLabel ? srcLabel : "SRC", sizeof(item.srcLabel));
 
     if (queue == g_telemQueue) {
-        portENTER_CRITICAL(&s_routeQueueMux);
+        if (!s_routeQueueMutex || xSemaphoreTake(s_routeQueueMutex, 0) != pdTRUE) {
+            return false;
+        }
         BaseType_t ok = xQueueSend(queue, &item, 0);
         if (ok != pdTRUE) {
             RoutedLine dropped = {};
             xQueueReceive(queue, &dropped, 0);
             ok = xQueueSend(queue, &item, 0);
         }
-        portEXIT_CRITICAL(&s_routeQueueMux);
+        xSemaphoreGive(s_routeQueueMutex);
         return ok == pdTRUE;
     }
     return xQueueSend(queue, &item, 0) == pdTRUE;
@@ -781,6 +784,7 @@ void setup() {
     ackMgr.begin();
     g_p2pQueue = xQueueCreate(P2P_QUEUE_LENGTH, sizeof(RoutedLine));
     g_telemQueue = xQueueCreate(TELEMETRY_QUEUE_LENGTH, sizeof(RoutedLine));
+    s_routeQueueMutex = xSemaphoreCreateMutex();
     xTaskCreate(p2pSendTask, "p2pSend", 4096, nullptr, TASK_PRIO_ESPNOW, nullptr);
     xTaskCreate(udpCommandTask, "udpCmd", 4096, nullptr, TASK_PRIO_UDP_CMD, nullptr);
     xTaskCreate(udpTelemetryTask, "udpTelem", 4096, nullptr, TASK_PRIO_UDP_TELEM, nullptr);
@@ -850,7 +854,8 @@ void loop() {
         HeartbeatPayload_t hb;
         hb.uptime_ms = now;
         hb.rssi      = 0;
-        hb.queue_len = (uint8_t)(g_telemQueue ? uxQueueMessagesWaiting(g_telemQueue) : 0);
+        UBaseType_t queued = g_telemQueue ? uxQueueMessagesWaiting(g_telemQueue) : 0;
+        hb.queue_len = (queued > 255) ? 255 : (uint8_t)queued;
         sendHubUdpFrame(MSG_HEARTBEAT, (const uint8_t *)&hb, sizeof(hb));
     }
 
