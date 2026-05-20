@@ -270,7 +270,7 @@ Offset  Size  Type    Field    Description
 1+      29×N  struct  entries  Array of TelemetryEntry_t (see §7.1 layout)
 ```
 
-Entries are packed with no padding. Max `floor(180/29) = 6` entries per batch.
+Entries are packed with no padding. Max `floor(FRAME_MAX_PAYLOAD / 29) = 6` entries per batch.
 
 ---
 

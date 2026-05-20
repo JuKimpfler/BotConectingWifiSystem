@@ -36,7 +36,6 @@
 // ── Flags ──────────────────────────────────────────────────────
 #define FLAG_ACK_REQ     0x01
 #define FLAG_IS_RESPONSE 0x02
-#define FLAG_PRIORITY    0x04
 #define FLAG_ENCRYPTED   0x04
 
 // ── Calibration commands ───────────────────────────────────────

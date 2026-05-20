@@ -23,7 +23,7 @@ static inline uint16_t crc16_update(uint16_t crc, uint8_t data) {
 
 static inline uint16_t crc16_buf(const uint8_t *data, size_t len) {
     uint16_t crc = 0xFFFF;
-    if (!data && len == 0) {
+    if (!data || len == 0) {
         return crc;
     }
     for (size_t i = 0; i < len; i++) {
