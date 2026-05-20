@@ -205,7 +205,7 @@ if ($InstallService) {
         Write-Fail "Service installation requires Administrator privileges."
         exit 1
     }
-    $NssmPath = (Get-Command nssm -ErrorAction SilentlyContinue)?.Source
+    $NssmPath = (Get-Command nssm -ErrorAction SilentlyContinue).Source
     if (-not $NssmPath) {
         Write-Fail "NSSM not found in PATH."
         exit 1
