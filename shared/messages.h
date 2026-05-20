@@ -119,6 +119,8 @@ typedef struct {
     uint32_t ts_ms;
 } TelemetryEntry_t;
 
+static_assert(sizeof(TelemetryEntry_t) == 29, "TelemetryEntry_t must be 29 bytes");
+
 typedef struct {
     uint8_t id;
     uint8_t vtype;
@@ -131,6 +133,8 @@ typedef struct {
     } value;
     uint32_t ts_ms;
 } TelemetryCompactValue_t;
+
+static_assert(sizeof(TelemetryCompactValue_t) == 14, "TelemetryCompactValue_t must be 14 bytes");
 
 #define TELEM_BATCH_MAX_VALUES 12
 #define TELEM_DICT_MAX_ENTRIES 8
