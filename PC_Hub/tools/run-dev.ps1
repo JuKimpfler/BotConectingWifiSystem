@@ -29,7 +29,7 @@ Write-Host "  Config   : $ConfigFile" -ForegroundColor Gray
 Write-Host ""
 Push-Location $RepoRoot
 try {
-    & $VenvPython -m PC_Hub_Migration.hub_core.main @HubArgs
+    & $VenvPython -m PC_Hub.hub_core.main @HubArgs
 }
 finally {
     Pop-Location

@@ -2,7 +2,7 @@
 
 > **Hinweis (V3.0):** Diese Datei beschreibt die frühere USB-Bridge-Migration.  
 > Die aktuelle V3.0-Implementierung nutzt direkten **UDP**-Verkehr zwischen PC-Hub und Satelliten
-> (siehe `PC_Hub_Migration/hub_core/` und `PC_Hub_Migration/tools/setup.ps1`).
+> (siehe `PC_Hub/hub_core/` und `PC_Hub/tools/setup.ps1`).
 
 > **Version:** 1.0  
 > **Date:** 2026-04  
@@ -49,7 +49,7 @@ BotConectingWifiSystem/
 │   ├── messages.h    ← Frame_t, msg types, roles, flags — the protocol contract
 │   ├── crc16.h       ← CRC-16/IBM implementation
 │   └── config_*.json ← configuration schema and defaults
-├── PC_Hub_Migration/ ← NEW: this migration deliverable
+├── PC_Hub/ ← NEW: this migration deliverable
 │   ├── docs/
 │   │   ├── protocol_v1.md       ← frozen protocol specification
 │   │   └── hub_migration_summary.md  ← this file
@@ -140,8 +140,8 @@ Performance upgrade path: If Python CPU load exceeds 60% at target rate → migr
 **Goal:** Stable contract and working dev environment before any hub code is written.
 
 Tasks:
-- [x] Create `PC_Hub_Migration/docs/protocol_v1.md` (frozen protocol specification)
-- [x] Create `PC_Hub_Migration/tools/setup.ps1` (environment bootstrap)
+- [x] Create `PC_Hub/docs/protocol_v1.md` (frozen protocol specification)
+- [x] Create `PC_Hub/tools/setup.ps1` (environment bootstrap)
 - [ ] Flash USB bridge firmware to an ESP32-C3/C6
   - Bridge firmware: minimal sketch that reads `Frame_t` from ESP-NOW and relays over USB CDC at 921600 baud with SOF framing `0xAA 0x55 <len_LE> <frame_bytes>`
 - [ ] Validate bridge by running `setup.ps1` and observing heartbeat frames in console
@@ -319,16 +319,16 @@ Full details in `tools/setup.ps1`. Quick reference:
 
 ```powershell
 # 1. Bootstrap environment (run once)
-.\PC_Hub_Migration\tools\setup.ps1
+.\PC_Hub\tools\setup.ps1
 
 # 2. Start hub in dev mode (foreground, coloured logs)
-.\PC_Hub_Migration\tools\run-dev.ps1
+.\PC_Hub\tools\run-dev.ps1
 
 # 3. Start simulator (separate terminal)
-.\PC_Hub_Migration\tools\simulator.ps1
+.\PC_Hub\tools\simulator.ps1
 
 # 4. Install as Windows service (production)
-.\PC_Hub_Migration\tools\setup.ps1 -InstallService
+.\PC_Hub\tools\setup.ps1 -InstallService
 ```
 
 Recommended Windows power settings for hub operation:
@@ -361,10 +361,10 @@ Recommended Windows power settings for hub operation:
 
 ## Appendix A: File Structure for PC Hub Implementation
 
-Recommended layout within `PC_Hub_Migration/` (to be created during implementation phases):
+Recommended layout within `PC_Hub/` (to be created during implementation phases):
 
 ```
-PC_Hub_Migration/
+PC_Hub/
 ├── docs/
 │   ├── protocol_v1.md          ← protocol spec (this repo, frozen)
 │   └── hub_migration_summary.md ← this file

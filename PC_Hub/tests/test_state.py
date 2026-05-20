@@ -1,8 +1,8 @@
 import unittest
 
-from PC_Hub_Migration.hub_core.config import HubConfig
-from PC_Hub_Migration.hub_core.protocol import Heartbeat, TelemetryValue
-from PC_Hub_Migration.hub_core.state import HubState
+from PC_Hub.hub_core.config import HubConfig
+from PC_Hub.hub_core.protocol import Heartbeat, TelemetryValue
+from PC_Hub.hub_core.state import HubState
 
 
 class StateTests(unittest.TestCase):
