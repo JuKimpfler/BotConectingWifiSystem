@@ -23,7 +23,7 @@ Kurzfassung: Dieses Projekt verbindet **2 Roboter (Teensy 4.0)** drahtlos über 
    - SSID/Passwort müssen mit `ESP_Satellite/include/sat_config.h` übereinstimmen
 2. **PC-Hub Setup**
    ```powershell
-   cd PC_Hub_Migration/tools
+   cd PC_Hub/tools
    .\Install-Hub.bat
    ```
 3. **Satelliten flashen (ESP #1 / #2)**
@@ -33,7 +33,7 @@ Kurzfassung: Dieses Projekt verbindet **2 Roboter (Teensy 4.0)** drahtlos über 
    pio run -e esp_sat2 -t upload
    ```
 4. **PC-Hub starten**
-   - `PC_Hub_Migration/Start-Hub.bat` (oder Desktop-Shortcut)
+   - `PC_Hub/Start-Hub.bat` (oder Desktop-Shortcut)
 5. **Mobile UI öffnen**
    - `http://<PC-IP>:8080/mobile?role=SAT1`
 

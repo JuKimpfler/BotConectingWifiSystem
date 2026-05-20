@@ -161,7 +161,7 @@ set REPO_ROOT=%SCRIPT_DIR%..
 cd /d "%REPO_ROOT%"
 set PYTHONPATH=%REPO_ROOT%
 set CONFIG_PATH=%SCRIPT_DIR%config\hub_config.yaml
-"%SCRIPT_DIR%.venv\Scripts\python.exe" -m PC_Hub_Migration.hub_core.main --config "%CONFIG_PATH%" --log-level INFO
+"%SCRIPT_DIR%.venv\Scripts\python.exe" -m PC_Hub.hub_core.main --config "%CONFIG_PATH%" --log-level INFO
 "@ | Set-Content -Path $StartScript -Encoding ASCII
 Write-Ok "Created launcher: $StartScript"
 
@@ -215,7 +215,7 @@ if ($InstallService) {
     $ErrFile     = Join-Path $LogsDir "service-stderr.log"
     & nssm install $ServiceName $PythonVenv
     & nssm set $ServiceName AppDirectory $RepoRoot
-    & nssm set $ServiceName AppParameters "-m PC_Hub_Migration.hub_core.main --config `"$ConfigFile`" --headless --log-level INFO"
+    & nssm set $ServiceName AppParameters "-m PC_Hub.hub_core.main --config `"$ConfigFile`" --headless --log-level INFO"
     & nssm set $ServiceName AppStdout $LogFile
     & nssm set $ServiceName AppStderr $ErrFile
     & nssm set $ServiceName Start SERVICE_AUTO_START

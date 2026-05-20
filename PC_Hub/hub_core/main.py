@@ -40,7 +40,8 @@ def best_public_host(bind_host: str) -> str:
         return "127.0.0.1"
 
 
-async def _run_until_stopped(runtime: HubRuntime, stop_event: asyncio.Event) -> None:
+async def _run_until_stopped(runtime: HubRuntime) -> None:
+    stop_event = asyncio.Event()
     await runtime.start()
     try:
         await stop_event.wait()
@@ -69,17 +70,19 @@ def main() -> int:
 
     if args.headless:
         try:
-            asyncio.run(_run_until_stopped(runtime, asyncio.Event()))
+            asyncio.run(_run_until_stopped(runtime))
         except KeyboardInterrupt:
             pass
         return 0
 
     loop = asyncio.new_event_loop()
     ready = threading.Event()
-    stop_event = asyncio.Event()
+    stop_event: asyncio.Event | None = None
 
     def _runner() -> None:
+        nonlocal stop_event
         asyncio.set_event_loop(loop)
+        stop_event = asyncio.Event()
         loop.run_until_complete(_start_runtime(runtime, ready, stop_event))
 
     thread = threading.Thread(target=_runner, name="bcws-runtime", daemon=True)
@@ -95,7 +98,8 @@ def main() -> int:
     try:
         run_gui(runtime, submit_async)
     finally:
-        loop.call_soon_threadsafe(stop_event.set)
+        if stop_event is not None:
+            loop.call_soon_threadsafe(stop_event.set)
         thread.join(timeout=2)
     return 0
 

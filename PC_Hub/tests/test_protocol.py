@@ -1,6 +1,6 @@
 import unittest
 
-from PC_Hub_Migration.hub_core.protocol import (
+from PC_Hub.hub_core.protocol import (
     MSG_CTRL,
     ROLE_HUB,
     ROLE_SAT1,

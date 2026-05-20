@@ -16,11 +16,11 @@
    - SSID/Passwort und Hub-IP müssen zu `ESP_Satellite/include/sat_config.h` passen
 2. **PC-Hub Setup**
    ```powershell
-   cd PC_Hub_Migration/tools
+   cd PC_Hub/tools
    .\Install-Hub.bat
    ```
 3. **PC-Hub starten**
-   - `PC_Hub_Migration/Start-Hub.bat` (oder Desktop-Shortcut)
+   - `PC_Hub/Start-Hub.bat` (oder Desktop-Shortcut)
 4. **Mobile UI**
    - `http://<PC-IP>:8080/mobile?role=SAT1`
 

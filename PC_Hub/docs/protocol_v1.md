@@ -161,15 +161,15 @@ CRC over 188 bytes → compute at runtime (see §9 test harness)
 Offset  Size  Type    Field      Description
 0       16    char[]  name       Null-terminated stream name (e.g. "Speed")
 16      1     uint8   vtype      Value type: 0=int32, 1=float32, 2=bool, 3=string
-17      4     union   value      int32/float32/bool/string[8] depending on vtype
-21      4     uint32  ts_ms      millis() timestamp on satellite (little-endian)
-25+     0     —       (padding to len)
+17      8     union   value      int32/float32/bool/string[8] depending on vtype
+25      4     uint32  ts_ms      millis() timestamp on satellite (little-endian)
+29+     0     —       (padding to len)
 ```
 
 **Value union detail:**
-- `vtype=0`: bytes 17–20 = int32_t little-endian
-- `vtype=1`: bytes 17–20 = IEEE 754 float32 little-endian
-- `vtype=2`: byte 17 = uint8 (0=false, 1=true); bytes 18–20 unused
+- `vtype=0`: bytes 17–20 = int32_t little-endian (bytes 21–24 unused)
+- `vtype=1`: bytes 17–20 = IEEE 754 float32 little-endian (bytes 21–24 unused)
+- `vtype=2`: byte 17 = uint8 (0=false, 1=true); bytes 18–24 unused
 - `vtype=3`: bytes 17–24 = null-terminated string (max 8 bytes)
 
 **Example decoded:**
@@ -267,10 +267,10 @@ No ACK. Max 180 bytes payload. Forwarded verbatim to peer satellite's UART.
 ```
 Offset  Size  Type    Field    Description
 0       1     uint8   count    Number of TelemetryEntry_t entries (1..N)
-1+      25×N  struct  entries  Array of TelemetryEntry_t (see §7.1 layout)
+1+      29×N  struct  entries  Array of TelemetryEntry_t (see §7.1 layout)
 ```
 
-Entries are packed with no padding. Max `floor(180/25) = 7` entries per batch.
+Entries are packed with no padding. Max `floor(FRAME_MAX_PAYLOAD / 29) = 6` entries per batch.
 
 ---
 
