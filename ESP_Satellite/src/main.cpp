@@ -209,17 +209,19 @@ static bool enqueueRoutedLine(QueueHandle_t queue, const char *line, const char 
     RoutedLine item = {};
     strlcpy(item.line, line, sizeof(item.line));
     strlcpy(item.srcLabel, srcLabel ? srcLabel : "SRC", sizeof(item.srcLabel));
-    if (xQueueSend(queue, &item, 0) == pdTRUE) return true;
 
     if (queue == g_telemQueue) {
-        RoutedLine dropped = {};
         portENTER_CRITICAL(&s_routeQueueMux);
-        xQueueReceive(queue, &dropped, 0);
-        bool ok = (xQueueSend(queue, &item, 0) == pdTRUE);
+        BaseType_t ok = xQueueSend(queue, &item, 0);
+        if (ok != pdTRUE) {
+            RoutedLine dropped = {};
+            xQueueReceive(queue, &dropped, 0);
+            ok = xQueueSend(queue, &item, 0);
+        }
         portEXIT_CRITICAL(&s_routeQueueMux);
-        return ok;
+        return ok == pdTRUE;
     }
-    return false;
+    return xQueueSend(queue, &item, 0) == pdTRUE;
 }
 
 static bool sendHubUdpFrame(uint8_t msgType, const uint8_t *payload, uint8_t payLen, uint8_t flags = 0) {

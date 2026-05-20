@@ -20,7 +20,7 @@ void UdpHubLink::tick() {
 }
 
 bool UdpHubLink::sendFrame(const Frame_t *frame) {
-    if (!_udpBegun || _hubIp == IPAddress(0, 0, 0, 0) || !frame || WiFi.status() != WL_CONNECTED) return false;
+    if (!_udpBegun || _hubIp == IPAddress(0, 0, 0, 0) || !frame || !isWifiConnected()) return false;
     uint16_t totalLen = FRAME_HEADER_SIZE + frame->len + sizeof(uint16_t);
     if (!_udp.beginPacket(_hubIp, HUB_UDP_PORT)) return false;
     size_t written = _udp.write(reinterpret_cast<const uint8_t *>(frame), totalLen);

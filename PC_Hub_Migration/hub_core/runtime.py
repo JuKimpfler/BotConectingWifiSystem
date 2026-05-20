@@ -243,6 +243,12 @@ class HubRuntime:
         if self.config.bind_host not in {"0.0.0.0", "::"}:
             return self.config.bind_host
         try:
+            host = socket.gethostbyname(socket.gethostname())
+            if host and not host.startswith("127."):
+                return host
+        except OSError:
+            pass
+        try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.connect(("8.8.8.8", 80))
             host = sock.getsockname()[0]
