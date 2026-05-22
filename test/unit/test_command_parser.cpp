@@ -111,6 +111,13 @@ int main() {
     CHECK(parsed.vtype == 1, "uartLineToEntry float type");
     CHECK(parsed.value.f32 > 12.4f && parsed.value.f32 < 12.6f, "uartLineToEntry float value");
 
+    // ── uartLineToEntry: truncates long names and accepts CRLF ─
+    ok = p.uartLineToEntry("DBG:VeryLongVariableName123=7\r\n", &parsed);
+    CHECK(ok, "uartLineToEntry accepts CRLF-terminated line");
+    CHECK(strcmp(parsed.name, "VeryLongVariabl") == 0, "uartLineToEntry truncates long names safely");
+    CHECK(parsed.vtype == 0, "uartLineToEntry keeps int type after truncation");
+    CHECK(parsed.value.i32 == 7, "uartLineToEntry parses int after truncation");
+
     // ── uartLineToFrame: legacy DBG1:/DBG2: prefixes rejected ─
     ok = p.uartLineToFrame("DBG1:Speed=200", 1, &tFrame);
     CHECK(!ok, "uartLineToFrame rejects legacy DBG1: prefix");
