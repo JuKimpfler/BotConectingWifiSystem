@@ -106,10 +106,10 @@ class DebugIngest:
             return samples
 
         if isinstance(payload, list):
-            samples: list[DebugSample] = []
+            list_samples: list[DebugSample] = []
             for item in payload:
-                samples.extend(self._parse_json_payload(item, rx_ts))
-            return samples
+                list_samples.extend(self._parse_json_payload(item, rx_ts))
+            return list_samples
 
         return []
 

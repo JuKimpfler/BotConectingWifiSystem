@@ -162,7 +162,12 @@ class DebugGuiApp:
             self.lw_angle = self._clamp(float(value), -180.0, 180.0)
             return
 
-        sensor_index = int(name[2:])
+        try:
+            sensor_index = int(name[2:])
+        except ValueError:
+            return
+        if sensor_index < 1 or sensor_index > 40:
+            return
         sensor = self.sensors[sensor_index]
         if name.startswith("LS"):
             sensor.analog = int(self._clamp(float(value), 0, 255))
