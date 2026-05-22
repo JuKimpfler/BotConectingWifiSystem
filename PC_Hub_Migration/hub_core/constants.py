@@ -1,0 +1,1 @@
+NUM_SENSORS = 40

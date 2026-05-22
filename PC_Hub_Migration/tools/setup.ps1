@@ -188,7 +188,7 @@ pyserial-asyncio==0.6
 websockets==12.0
 
 # HTTP REST API
-aiohttp==3.9.5
+aiohttp==3.13.3
 
 # YAML configuration parsing
 PyYAML==6.0.1
@@ -264,6 +264,10 @@ bridge:
 telemetry:
   max_rate_hz: 50             # Max WebSocket push rate per stream to UI
   batch_flush_ms: 200         # SQLite batch write interval (ms)
+
+debug:
+  bind_host: "0.0.0.0"        # UDP listener for incoming debug values
+  udp_port: 9999              # Supported keys: LS1..LS40, LB1..LB40, LW
 
 heartbeat:
   interval_ms: 1000           # How often hub sends heartbeat to satellites
