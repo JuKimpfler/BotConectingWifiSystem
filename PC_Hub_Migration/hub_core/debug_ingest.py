@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-SENSOR_KEY_PATTERN = re.compile(r"^(LS|LB)([1-9]\d?|[1-3]\d|40)$")
+SENSOR_KEY_PATTERN = re.compile(r"^(LS|LB)([1-9]|[1-2]\d|3\d|40)$")
 
 
 @dataclass(slots=True)

@@ -280,10 +280,10 @@ class DebugGuiApp:
 
     @staticmethod
     def _sensor_positions(cx: float, cy: float, radius: float) -> Iterable[tuple[int, float, float]]:
-        start = 100.0
+        start_angle_degrees = 100.0
         step = 360.0 / 40.0
         for idx in range(1, 41):
-            deg = start - (idx - 1) * step
+            deg = start_angle_degrees - (idx - 1) * step
             rad = math.radians(deg)
             x = cx + math.cos(rad) * radius
             y = cy - math.sin(rad) * radius
