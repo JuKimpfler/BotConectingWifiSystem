@@ -11,6 +11,9 @@ from typing import Iterable
 from debug_ingest import DebugIngest, DebugSample
 
 
+NUM_SENSORS = 40
+
+
 @dataclass(slots=True)
 class SensorState:
     analog: int = 0
@@ -26,7 +29,7 @@ class DebugGuiApp:
         self.root.minsize(1180, 760)
         self.root.configure(bg="#0b1220")
 
-        self.sensors = {i: SensorState() for i in range(1, 41)}
+        self.sensors = {i: SensorState() for i in range(1, NUM_SENSORS + 1)}
         self.lw_angle = 0.0
         self.last_update_ts = 0.0
 
@@ -135,8 +138,8 @@ class DebugGuiApp:
         self.sensor_tree.column("analog", width=110, anchor=tk.CENTER)
         self.sensor_tree.column("active", width=110, anchor=tk.CENTER)
         self.sensor_tree.pack(fill=tk.BOTH, expand=True)
-        for idx in range(1, 41):
-            self.sensor_tree.insert("", tk.END, iid=f"s{idx}", values=(f"S{idx}", 0, "false"))
+        for idx in range(1, NUM_SENSORS + 1):
+            self.sensor_tree.insert("", tk.END, iid=f"s{idx}", values=(f"LS{idx}/LB{idx}", 0, "false"))
 
     def _schedule_updates(self) -> None:
         self._drain_queue()
@@ -168,7 +171,7 @@ class DebugGuiApp:
             sensor_index = int(name[2:])
         except ValueError:
             return
-        if sensor_index < 1 or sensor_index > 40:
+        if sensor_index < 1 or sensor_index > NUM_SENSORS:
             return
         sensor = self.sensors[sensor_index]
         if name.startswith("LS"):
@@ -255,9 +258,9 @@ class DebugGuiApp:
         top = 40
         bottom = h - 35
         usable_h = max(10, bottom - top)
-        bar_w = max(2, (w - 2 * padding_x) / 40.0)
+        bar_w = max(2, (w - 2 * padding_x) / float(NUM_SENSORS))
 
-        for i in range(1, 41):
+        for i in range(1, NUM_SENSORS + 1):
             sensor = self.sensors[i]
             x0 = padding_x + (i - 1) * bar_w + 1
             x1 = padding_x + i * bar_w - 1
@@ -274,15 +277,15 @@ class DebugGuiApp:
         c.create_text(padding_x, 14, text="LS1..LS40 Analogwerte (0-255)", anchor=tk.W, fill="#93c5fd", font=("Segoe UI Semibold", 11))
 
     def _refresh_sensor_table(self) -> None:
-        for idx in range(1, 41):
+        for idx in range(1, NUM_SENSORS + 1):
             sensor = self.sensors[idx]
-            self.sensor_tree.item(f"s{idx}", values=(f"S{idx}", sensor.analog, "true" if sensor.active else "false"))
+            self.sensor_tree.item(f"s{idx}", values=(f"LS{idx}/LB{idx}", sensor.analog, "true" if sensor.active else "false"))
 
     @staticmethod
     def _sensor_positions(cx: float, cy: float, radius: float) -> Iterable[tuple[int, float, float]]:
-        start_angle_degrees = 100.0
-        step = 360.0 / 40.0
-        for idx in range(1, 41):
+        start_angle_degrees = 100.0  # aligns S1..S40 roughly to the reference board numbering
+        step = 360.0 / float(NUM_SENSORS)
+        for idx in range(1, NUM_SENSORS + 1):
             deg = start_angle_degrees - (idx - 1) * step
             rad = math.radians(deg)
             x = cx + math.cos(rad) * radius
