@@ -8,11 +8,8 @@ from dataclasses import dataclass
 from tkinter import ttk
 from typing import Iterable
 
+from constants import NUM_SENSORS
 from debug_ingest import DebugIngest, DebugSample
-
-
-NUM_SENSORS = 40
-
 
 @dataclass(slots=True)
 class SensorState:
@@ -283,7 +280,9 @@ class DebugGuiApp:
 
     @staticmethod
     def _sensor_positions(cx: float, cy: float, radius: float) -> Iterable[tuple[int, float, float]]:
-        start_angle_degrees = 100.0  # aligns S1..S40 roughly to the reference board numbering
+        # Approximate alignment to the provided board sketch:
+        # S1 starts in the right-upper quadrant and then continues clockwise.
+        start_angle_degrees = 100.0
         step = 360.0 / float(NUM_SENSORS)
         for idx in range(1, NUM_SENSORS + 1):
             deg = start_angle_degrees - (idx - 1) * step

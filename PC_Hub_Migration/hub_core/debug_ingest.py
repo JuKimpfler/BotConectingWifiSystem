@@ -9,8 +9,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-
-SENSOR_KEY_PATTERN = re.compile(r"^(LS|LB)([1-9]|[1-3]\d|40)$")
+from constants import NUM_SENSORS
 
 
 @dataclass(slots=True)
@@ -140,7 +139,15 @@ class DebugIngest:
 
     @staticmethod
     def _is_supported_name(name: str) -> bool:
-        return name == "LW" or SENSOR_KEY_PATTERN.match(name) is not None
+        if name == "LW":
+            return True
+        if not (name.startswith("LS") or name.startswith("LB")):
+            return False
+        suffix = name[2:]
+        if not suffix.isdigit():
+            return False
+        index = int(suffix)
+        return 1 <= index <= NUM_SENSORS
 
     @staticmethod
     def _coerce_value(name: str, raw: str) -> Any:
