@@ -37,7 +37,7 @@
 #define ACK_MAX_RETRIES       3
 
 // ── UART buffer ───────────────────────────────────────────────
-#define UART_RX_BUF_SIZE     512
+#define UART_RX_BUF_SIZE     2048
 #define UART_TX_BUF_SIZE     256
 #define I2C_LINE_BUF_SIZE    128
 #define I2C_QUEUE_SIZE       8

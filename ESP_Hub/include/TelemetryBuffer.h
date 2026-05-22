@@ -8,7 +8,7 @@
 #include <Arduino.h>
 #include "messages.h"
 
-#define TELEM_MAX_STREAMS  32
+#define TELEM_MAX_STREAMS  192
 
 struct StreamStat {
     char     name[17];

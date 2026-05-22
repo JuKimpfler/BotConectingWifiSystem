@@ -80,7 +80,7 @@ typedef struct {
 
 // ── Compact DBG telemetry payload (stream entry) ────────────
 #define TELEM_NAME_MAX_LEN       16
-#define TELEM_BATCH_MAX_VALUES   16
+#define TELEM_BATCH_MAX_VALUES   30
 
 typedef struct {
     char     name[TELEM_NAME_MAX_LEN];  // Stream name (null-terminated)
