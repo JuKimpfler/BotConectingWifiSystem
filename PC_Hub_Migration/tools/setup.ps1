@@ -265,6 +265,10 @@ telemetry:
   max_rate_hz: 50             # Max WebSocket push rate per stream to UI
   batch_flush_ms: 200         # SQLite batch write interval (ms)
 
+debug:
+  bind_host: "0.0.0.0"        # UDP listener for incoming debug values
+  udp_port: 9999              # Supported keys: LS1..LS40, LB1..LB40, LW
+
 heartbeat:
   interval_ms: 1000           # How often hub sends heartbeat to satellites
   timeout_ms: 4000            # Mark satellite offline after this silence (ms)
