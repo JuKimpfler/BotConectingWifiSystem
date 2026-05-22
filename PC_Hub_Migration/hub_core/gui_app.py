@@ -8,13 +8,22 @@ from dataclasses import dataclass
 from tkinter import ttk
 from typing import Iterable
 
-from constants import NUM_SENSORS
-from debug_ingest import DebugIngest, DebugSample
+try:
+    from .constants import NUM_SENSORS
+    from .debug_ingest import DebugIngest, DebugSample
+except ImportError:  # pragma: no cover
+    from constants import NUM_SENSORS
+    from debug_ingest import DebugIngest, DebugSample
 
 @dataclass(slots=True)
 class SensorState:
     analog: int = 0
     active: bool = False
+
+
+# Approximate alignment to the provided board sketch:
+# S1 starts in the right-upper quadrant and then continues clockwise.
+BOARD_START_ANGLE_DEGREES = 100.0
 
 
 class DebugGuiApp:
@@ -280,12 +289,9 @@ class DebugGuiApp:
 
     @staticmethod
     def _sensor_positions(cx: float, cy: float, radius: float) -> Iterable[tuple[int, float, float]]:
-        # Approximate alignment to the provided board sketch:
-        # S1 starts in the right-upper quadrant and then continues clockwise.
-        start_angle_degrees = 100.0
         step = 360.0 / float(NUM_SENSORS)
         for idx in range(1, NUM_SENSORS + 1):
-            deg = start_angle_degrees - (idx - 1) * step
+            deg = BOARD_START_ANGLE_DEGREES - (idx - 1) * step
             rad = math.radians(deg)
             x = cx + math.cos(rad) * radius
             y = cy - math.sin(rad) * radius

@@ -5,8 +5,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from debug_ingest import DebugIngest
-from gui_app import DebugGuiApp
+try:
+    from .debug_ingest import DebugIngest
+    from .gui_app import DebugGuiApp
+except ImportError:  # pragma: no cover
+    from debug_ingest import DebugIngest
+    from gui_app import DebugGuiApp
 
 try:
     import yaml

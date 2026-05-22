@@ -9,7 +9,10 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from constants import NUM_SENSORS
+try:
+    from .constants import NUM_SENSORS
+except ImportError:  # pragma: no cover
+    from constants import NUM_SENSORS
 
 
 @dataclass(slots=True)
@@ -119,9 +122,7 @@ class DebugIngest:
         for token in re.split(r"[,\s;]+", text):
             if not token:
                 continue
-            if token.count("=") > 1 or token.count(":") > 1:
-                continue
-            if "=" in token and ":" in token:
+            if not self._is_valid_key_value_token(token):
                 continue
             if "=" in token:
                 name, raw = token.split("=", 1)
@@ -136,6 +137,14 @@ class DebugIngest:
                 continue
             samples.append(DebugSample(name=name, value=self._coerce_value(name, raw.strip()), rx_ts=rx_ts))
         return samples
+
+    @staticmethod
+    def _is_valid_key_value_token(token: str) -> bool:
+        return (
+            token.count("=") <= 1
+            and token.count(":") <= 1
+            and not ("=" in token and ":" in token)
+        )
 
     @staticmethod
     def _is_supported_name(name: str) -> bool:
