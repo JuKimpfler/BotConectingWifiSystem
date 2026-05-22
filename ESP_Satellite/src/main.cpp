@@ -56,7 +56,7 @@ static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static uint32_t g_lastP2pLedBlink = 0;
 static uint32_t g_lastP2pDataFlow = 0;
 static bool     g_p2pLedBlinkState = false;
-#define SAT_TELEM_MAX_STREAMS 32
+#define SAT_TELEM_MAX_STREAMS 96
 static char s_i2cRxLine[I2C_LINE_BUF_SIZE];
 static uint8_t s_i2cRxIdx = 0;
 static bool s_i2cRxOverflow = false;
@@ -636,8 +636,10 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             Serial.print(uartBuf);
 #else
             TeensySerial.print(uartBuf);
-            // Standard mode: show UART TX traffic on USB monitor as well
-            Serial.print(uartBuf);
+            if (g_monitorMode == MONITOR_BRIDGE) {
+                // Optional USB mirror for diagnostics only
+                Serial.print(uartBuf);
+            }
 #endif
         } else {
             USB_DEBUG_PRINTF("[SAT%d] cmd type=0x%02X seq=%u – UART encode failed\n",
@@ -692,8 +694,10 @@ static void onFrame(const uint8_t *mac, const Frame_t *frame) {
             Serial.write((const uint8_t *)rawBuf, frame->len + 1);
 #else
             TeensySerial.write((const uint8_t *)rawBuf, frame->len + 1);
-            // Standard mode: show UART RX traffic on USB monitor as well
-            Serial.write((const uint8_t *)rawBuf, frame->len + 1);
+            if (g_monitorMode == MONITOR_BRIDGE) {
+                // Optional USB mirror for diagnostics only
+                Serial.write((const uint8_t *)rawBuf, frame->len + 1);
+            }
 #endif
             if (g_monitorMode == MONITOR_BRIDGE) {
                 USB_DEBUG_PRINTF("[SAT%d] P2P raw -> Teensy %u bytes\n", SAT_ID, frame->len);
@@ -783,6 +787,9 @@ void setup() {
     USB_DEBUG_PRINTF("[SAT%d] *** UART_BRIDGE_USB active – HW UART pins disabled ***\n", SAT_ID);
     USB_DEBUG_PRINTF("[SAT%d]   UART payload traffic is routed via USB only.\n", SAT_ID);
 #else
+    // Increase hardware UART RX buffering so short telemetry bursts are not lost
+    // while ESP-NOW frames are assembled and transmitted.
+    TeensySerial.setRxBufferSize(UART_RX_BUF_SIZE);
     TeensySerial.begin(HW_UART_BAUD, SERIAL_8N1, HW_UART_RX_PIN, HW_UART_TX_PIN);
 #endif
 
@@ -823,29 +830,36 @@ void loop() {
 #ifndef UART_BRIDGE_USB
     static char uartLine[UART_RX_BUF_SIZE];
     static int  uartIdx = 0;
+    static bool uartOverflow = false;
 
     while (TeensySerial.available()) {
         char c = (char)TeensySerial.read();
         if (c == '\n' || c == '\r') {
-            if (uartIdx > 0) {
+            if (!uartOverflow && uartIdx > 0) {
                 uartLine[uartIdx] = '\0';
                 // Route based on prefix:
                 // "DBG:" prefix → telemetry/debug to hub
                 // no prefix    → transparent P2P bridge to peer satellite
                 bool routed = routePayloadLine(uartLine, "UART");
-                if (routed) {
-                    // Standard mode: show relevant UART RX payload traffic on USB monitor as well
+                if (routed && g_monitorMode == MONITOR_BRIDGE) {
+                    // Optional USB mirror for diagnostics only
                     Serial.println(uartLine);
                 }
-                uartIdx = 0;
             }
+            uartIdx = 0;
+            uartOverflow = false;
         } else {
-            // Add character only if there's space, discard line on overflow
+            // Add character only if there's space.
+            // On overflow, ignore the rest until newline to avoid partial/mixed frames.
+            if (uartOverflow) {
+                continue;
+            }
             if (uartIdx < (int)(sizeof(uartLine) - 1)) {
                 uartLine[uartIdx++] = c;
             } else {
-                // Buffer overflow - discard the entire line
+                // Buffer overflow - discard the entire line until newline
                 uartIdx = 0;
+                uartOverflow = true;
             }
         }
     }
