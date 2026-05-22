@@ -162,6 +162,8 @@ class DebugGuiApp:
             self.lw_angle = self._clamp(float(value), -180.0, 180.0)
             return
 
+        if len(name) < 3:
+            return
         try:
             sensor_index = int(name[2:])
         except ValueError:

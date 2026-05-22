@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-SENSOR_KEY_PATTERN = re.compile(r"^(LS|LB)([1-9]|[1-3][0-9]|40)$")
+SENSOR_KEY_PATTERN = re.compile(r"^(LS|LB)([1-9]\d?|[1-3]\d|40)$")
 
 
 @dataclass(slots=True)
@@ -120,6 +120,10 @@ class DebugIngest:
         for token in re.split(r"[,\s;]+", text):
             if not token:
                 continue
+            if token.count("=") > 1 or token.count(":") > 1:
+                continue
+            if "=" in token and ":" in token:
+                continue
             if "=" in token:
                 name, raw = token.split("=", 1)
             elif ":" in token:
@@ -127,6 +131,8 @@ class DebugIngest:
             else:
                 continue
             name = name.strip()
+            if not name or not raw.strip():
+                continue
             if not self._is_supported_name(name):
                 continue
             samples.append(DebugSample(name=name, value=self._coerce_value(name, raw.strip()), rx_ts=rx_ts))
